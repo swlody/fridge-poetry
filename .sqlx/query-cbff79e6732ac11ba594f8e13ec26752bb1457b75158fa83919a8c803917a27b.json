@@ -1,0 +1,49 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, x, y, rotation, word\n        FROM magnets\n        WHERE x >= $1 AND x <= $2 AND y >= $3 AND y <= $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "x",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "y",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "rotation",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "word",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "cbff79e6732ac11ba594f8e13ec26752bb1457b75158fa83919a8c803917a27b"
+}

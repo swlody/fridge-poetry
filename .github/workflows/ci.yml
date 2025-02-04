@@ -1,0 +1,152 @@
+name: Check and test
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+env:
+  RUST_TOOLCHAIN: stable
+  TOOLCHAIN_PROFILE: minimal
+  SQLX_OFFLINE: true
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test-frontend:
+    name: Test frontend
+    runs-on: ubuntu-latest
+    env:
+      DENO_DIR: ~/.deno
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Cache Deno dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DENO_DIR }}
+          key: ${{ hashFiles('frontend/deno.lock') }}
+
+      - name: Setup Deno
+        uses: denolib/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: deno install --allow-scripts
+
+      - name: Run linter
+        working-directory: ./frontend
+        run: deno lint src/
+
+      - name: Check formatting
+        working-directory: ./frontend
+        run: deno fmt --check src/
+
+      # - name: Run tests
+      #   run: deno test --parallel tests/
+
+  check-style:
+    name: Check style
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # By default actions/checkout checks out a merge commit. Check out the PR head instead.
+          # https://github.com/actions/checkout#checkout-pull-request-head-commit-instead-of-merge-commit
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt clippy
+
+      - name: Setup Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run linter
+        run: cargo clippy
+
+  # build-test-artifacts:
+  #   name: Build and archive tests
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
+  #       with:
+  #         ref: ${{ github.event.pull_request.head.sha }}
+
+  #     - name: Setup Rust
+  #       uses: dtolnay/rust-toolchain@stable
+
+  # - name: Setup Rust Cache
+  #   uses: Swatinem/rust-cache@v2
+
+  #     - name: Setup Nextest
+  #       uses: taiki-e/install-action@nextest
+
+  #     - name: Build and archive tests
+  #       working-directory: ./backend
+  #       run: cargo nextest archive --all --archive-file nextest-archive.tar.zst
+
+  #     - name: Upload archive to workflow
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: nextest-archive
+  #         path: ./backend/nextest-archive.tar.zst
+
+  # run-tests-partitioned:
+  #   name: Run Rust tests with partitioning
+  #   runs-on: ubuntu-latest
+
+  #   permissions:
+  #     contents: read
+
+  #   services:
+  #     postgres:
+  #       image: postgres
+  #       env:
+  #         POSTGRES_DB: fridge-db
+  #         POSTGRES_USER: postgres
+  #         POSTGRES_PASSWORD: postgres
+  #       ports:
+  #         - "5432:5432"
+  #       # Set health checks to wait until postgres has started
+  #       options: --health-cmd pg_isready
+  #         --health-interval 10s
+  #         --health-timeout 5s
+  #         --health-retries 5
+
+  #   needs: build-test-artifacts
+  #   strategy:
+  #     matrix:
+  #       partition: [1, 2]
+  #   steps:
+  #     # The source directory must be checked out.
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         # By default actions/checkout checks out a merge commit. Check out the PR head instead.
+  #         # https://github.com/actions/checkout#checkout-pull-request-head-commit-instead-of-merge-commit
+  #         ref: ${{ github.event.pull_request.head.sha }}
+  #     # In this example, the Rust toolchain is not installed. cargo nextest's run phase does not
+  #     # require Cargo. You can choose to install Rust if your tests require it, of course.
+  #     # Instead, create ~/.cargo/bin as required by the install action.
+  #     - run: mkdir -p ~/.cargo/bin
+  #     - name: Install nextest
+  #       uses: taiki-e/install-action@nextest
+
+  #     - name: Download archive
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: nextest-archive
+
+  #     - name: Run tests
+  #       working-directory: ./backend
+  #       run: |
+  #         ~/.cargo/bin/cargo-nextest nextest run --archive-file ../nextest-archive.tar.zst \
+  #           --partition count:${{ matrix.partition }}/2

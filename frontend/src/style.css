@@ -1,0 +1,53 @@
+.magnet {
+  border: 1px solid black;
+  display: inline-block;
+  padding: 5px;
+  font-family: Georgia, "Times New Roman", Times, serif;
+  box-shadow: 3px 2px black;
+  position: absolute;
+  user-select: none;
+  cursor: grab;
+  background: white;
+}
+
+#door {
+  position: absolute;
+  min-width: 32000px;
+  min-height: 32000px;
+  top: 0;
+  left: 0;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  overflow: hidden;
+}
+
+footer {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  margin: 8px;
+}
+
+.loader {
+  border: 16px solid #f3f3f3; /* Light grey */
+  border-top: 16px solid #3498db; /* Blue */
+  border-radius: 50%;
+  width: 10vh;
+  height: 10vh;
+  animation: spin 1s linear infinite;
+  position: absolute;
+  left: 45vw;
+  top: 40vh;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}

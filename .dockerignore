@@ -1,0 +1,10 @@
+target/
+.env
+src/snapshots
+.rustfmt.toml
+frontend/
+seeds/
+fly.toml
+Dockerfile
+.dockerignore
+.git/
