@@ -12,7 +12,10 @@ interface Magnet {
 }
 
 function getMagnetDiv(magnet: Magnet): string {
-  return `<div class="magnet" id=${magnet.id} style="left: ${magnet.x}px; top: ${magnet.y}px; rotate: ${magnet.rotation}deg;">
+  return `
+  <div class="magnet" id=${magnet.id} style="left: ${magnet.x}px; top: ${magnet.y}px; rotate: ${magnet.rotation}deg;">
+    <div hidden class="dot rotate"></div>
+    <div hidden class="rotate-link"></div>
     ${magnet.word}
   </div>`;
 }
@@ -90,6 +93,17 @@ async function replaceMagnets() {
       const x = parseInt(element.style.left);
       const y = parseInt(element.style.top);
       const id = parseInt(element.id);
+
+      if (magnets.get(id)!.x == x && magnets.get(id)!.y == y) {
+        document.getElementById(id.toString())!.childNodes.forEach(
+          (e) => {
+            const he = e as HTMLElement;
+            he.hidden = !he.hidden;
+          },
+        );
+        return;
+      }
+
       const rotation = parseInt(element.style.rotate);
 
       magnets.set(id, {

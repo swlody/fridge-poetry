@@ -31,6 +31,32 @@ footer {
   margin: 8px;
 }
 
+.dot {
+  height: 10px;
+  width: 10px;
+  background-color: #1e88e5;
+  position: absolute;
+  border-radius: 100px;
+  border: 1px solid white;
+  user-select: none;
+}
+
+.dot.rotate {
+  top: -20px;
+  left: calc(50% - 5px);
+  cursor: url("https://findicons.com/files/icons/1620/crystal_project/16/rotate_ccw.png"),
+    auto;
+}
+.rotate-link {
+  position: absolute;
+  width: 1px;
+  height: 15px;
+  background-color: #1e88e5;
+  top: -15px;
+  left: calc(50% + 0.5px);
+  z-index: -1;
+}
+
 .loader {
   border: 16px solid #f3f3f3; /* Light grey */
   border-top: 16px solid #3498db; /* Blue */
@@ -39,8 +65,8 @@ footer {
   height: 10vh;
   animation: spin 1s linear infinite;
   position: absolute;
-  left: 45vw;
-  top: 40vh;
+  left: calc(50vw - 5vh);
+  top: 45vh;
 }
 
 @keyframes spin {
