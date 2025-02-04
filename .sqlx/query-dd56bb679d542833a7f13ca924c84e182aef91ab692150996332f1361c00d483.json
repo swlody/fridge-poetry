@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE magnets SET x = $1, y = $2, rotation = $3, last_modifier = $4 WHERE id = $5",
+  "query": "UPDATE magnets SET geom = ST_MakePoint($1::INTEGER, $2::INTEGER), rotation = $3, last_modifier = $4 WHERE id = $5",
   "describe": {
     "columns": [],
     "parameters": {
@@ -14,5 +14,5 @@
     },
     "nullable": []
   },
-  "hash": "e0c0a73e8c63fb5bde92ddd0cd12a72c6be15ea8220dcbcf8ef45e16e8f97021"
+  "hash": "dd56bb679d542833a7f13ca924c84e182aef91ab692150996332f1361c00d483"
 }

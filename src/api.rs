@@ -14,8 +14,8 @@ use crate::{error::FridgeError, state::AppState};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct Magnet {
     id: i32,
-    x: i32,
-    y: i32,
+    x: Option<i32>,
+    y: Option<i32>,
     rotation: i32,
     word: Option<String>,
 }
@@ -33,14 +33,14 @@ async fn magnets(
     State(state): State<AppState>,
     Query(window): Query<Window>,
 ) -> Result<impl IntoResponse, FridgeError> {
-    let magnets = sqlx::query_as!(
+    let magnets: Vec<Magnet> = sqlx::query_as!(
         Magnet,
-        r#"SELECT id, x, y, rotation, word
+        r#"SELECT id, ST_X(geom)::INTEGER AS x, ST_Y(geom)::INTEGER AS y, rotation, word
         FROM magnets
-        WHERE x >= $1 AND x <= $2 AND y >= $3 AND y <= $4"#,
+        WHERE geom && ST_MakeEnvelope($1::INTEGER, $2::INTEGER, $3::INTEGER, $4::INTEGER, 0)"#,
         window.min_x,
-        window.max_x,
         window.min_y,
+        window.max_x,
         window.max_y
     )
     .fetch_all(&state.postgres)
@@ -61,10 +61,14 @@ async fn update_magnet(
         .and_then(|s| s.parse().ok())
         .context("Invalid x-request-id header")?;
 
+    let x = magnet.x.context("Missing X")?;
+    let y = magnet.y.context("Missing Y")?;
+
     sqlx::query!(
-        "UPDATE magnets SET x = $1, y = $2, rotation = $3, last_modifier = $4 WHERE id = $5",
-        magnet.x,
-        magnet.y,
+        "UPDATE magnets SET geom = ST_MakePoint($1::INTEGER, $2::INTEGER), rotation = $3, \
+         last_modifier = $4 WHERE id = $5",
+        x,
+        y,
         magnet.rotation,
         request_id,
         magnet.id
@@ -75,8 +79,12 @@ async fn update_magnet(
     Ok(StatusCode::OK)
 }
 
-async fn health_check(State(_state): State<AppState>) -> Result<impl IntoResponse, FridgeError> {
-    Ok(StatusCode::OK)
+async fn health_check(State(state): State<AppState>) -> impl IntoResponse {
+    if state.postgres.is_closed() {
+        StatusCode::INTERNAL_SERVER_ERROR
+    } else {
+        StatusCode::OK
+    }
 }
 
 pub fn routes() -> Router<AppState> {
