@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE magnets SET x = $1, y = $2, rotation = $3, last_modifier = $4 WHERE id = $5",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4",
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e0c0a73e8c63fb5bde92ddd0cd12a72c6be15ea8220dcbcf8ef45e16e8f97021"
+}
