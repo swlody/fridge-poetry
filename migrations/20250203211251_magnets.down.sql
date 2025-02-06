@@ -1,1 +1,3 @@
+DROP EXTENSION IF EXISTS postgis;
 DROP TABLE IF EXISTS magnets;
+DROP INDEX IF EXISTS idx_magnets_geom;

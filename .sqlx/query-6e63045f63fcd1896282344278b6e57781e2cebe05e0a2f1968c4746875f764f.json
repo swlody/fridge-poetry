@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, ST_X(geom)::INTEGER AS x, ST_Y(geom)::INTEGER AS y, rotation, word\n        FROM magnets\n        WHERE geom && ST_MakeEnvelope($1::INTEGER, $2::INTEGER, $3::INTEGER, $4::INTEGER, 0)",
+  "query": "SELECT id, ST_X(coords)::INTEGER AS \"x!\", ST_Y(coords)::INTEGER AS \"y!\", rotation, word\n        FROM magnets\n        WHERE coords && ST_MakeEnvelope($1::INTEGER, $2::INTEGER, $3::INTEGER, $4::INTEGER)",
   "describe": {
     "columns": [
       {
@@ -10,12 +10,12 @@
       },
       {
         "ordinal": 1,
-        "name": "x",
+        "name": "x!",
         "type_info": "Int4"
       },
       {
         "ordinal": 2,
-        "name": "y",
+        "name": "y!",
         "type_info": "Int4"
       },
       {
@@ -45,5 +45,5 @@
       false
     ]
   },
-  "hash": "6566a361f33ebcb81f048b8755c02a9903782fd3a69cd29f30f2ef1249979c57"
+  "hash": "6e63045f63fcd1896282344278b6e57781e2cebe05e0a2f1968c4746875f764f"
 }

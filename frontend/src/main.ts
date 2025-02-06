@@ -1,6 +1,7 @@
 import "./style.css";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL || "api";
+const WS_URL = import.meta.env.VITE_WS_BASE_URL || "ws";
 
 interface Magnet {
   id: number;
@@ -13,7 +14,7 @@ interface Magnet {
 
 function getMagnetDiv(magnet: Magnet): string {
   return `
-  <div class="magnet" id=${magnet.id} style="left: ${magnet.x}px; top: ${magnet.y}px; rotate: ${magnet.rotation}deg;">
+  <div class="magnet" id=${magnet.id} style="left: ${magnet.x}px; top: ${magnet.y}px; rotate: ${magnet.rotation}deg; z-index: ${magnet.zIndex};">
     <div hidden class="dot rotate"></div>
     <div hidden class="rotate-link"></div>
     ${magnet.word}
@@ -48,12 +49,14 @@ async function replaceMagnets() {
 
   let divs = "";
   for (const magnet of magnetArray) {
-    magnets.set(magnet.id, magnet);
-    // TODO this has to go first I think
-    if (!magnets.get(magnet.id)!.zIndex) {
-      magnets.get(magnet.id)!.zIndex = globalzIndex;
-      globalzIndex++;
+    if (!magnets.get(magnet.id)) {
+      magnet.zIndex = ++globalzIndex;
+    } else {
+      magnet.zIndex = magnets.get(magnet.id)!.zIndex;
     }
+
+    magnets.set(magnet.id, magnet);
+
     divs += getMagnetDiv(magnet);
   }
 
@@ -157,3 +160,24 @@ document.addEventListener("mouseup", async () => {
 
   await replaceMagnets();
 });
+
+const webSocket = new WebSocket(WS_URL);
+webSocket.onmessage = (e) => {
+  const update = JSON.parse(e.data);
+  if (magnets.get(update.id)) {
+    const magnet = magnets.get(update.id)!;
+    magnets.set(update.id, {
+      id: update.id,
+      x: update.x,
+      y: update.y,
+      rotation: update.rotation,
+      word: magnet.word,
+      zIndex: ++globalzIndex,
+    });
+    const element = document.getElementById(update.id.toString())!;
+    element.style.left = update.x + "px";
+    element.style.top = update.y + "px";
+    element.style.rotate = update.rotation + "deg";
+    element.style.zIndex = String(globalzIndex);
+  }
+};

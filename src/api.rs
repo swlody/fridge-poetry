@@ -14,8 +14,8 @@ use crate::{error::FridgeError, state::AppState};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct Magnet {
     id: i32,
-    x: Option<i32>,
-    y: Option<i32>,
+    x: i32,
+    y: i32,
     rotation: i32,
     word: Option<String>,
 }
@@ -35,9 +35,9 @@ async fn magnets(
 ) -> Result<impl IntoResponse, FridgeError> {
     let magnets: Vec<Magnet> = sqlx::query_as!(
         Magnet,
-        r#"SELECT id, ST_X(geom)::INTEGER AS x, ST_Y(geom)::INTEGER AS y, rotation, word
+        r#"SELECT id, ST_X(coords)::INTEGER AS "x!", ST_Y(coords)::INTEGER AS "y!", rotation, word
         FROM magnets
-        WHERE geom && ST_MakeEnvelope($1::INTEGER, $2::INTEGER, $3::INTEGER, $4::INTEGER, 0)"#,
+        WHERE coords && ST_MakeEnvelope($1::INTEGER, $2::INTEGER, $3::INTEGER, $4::INTEGER)"#,
         window.min_x,
         window.min_y,
         window.max_x,
@@ -61,14 +61,12 @@ async fn update_magnet(
         .and_then(|s| s.parse().ok())
         .context("Invalid x-request-id header")?;
 
-    let x = magnet.x.context("Missing X")?;
-    let y = magnet.y.context("Missing Y")?;
-
     sqlx::query!(
-        "UPDATE magnets SET geom = ST_MakePoint($1::INTEGER, $2::INTEGER), rotation = $3, \
-         last_modifier = $4 WHERE id = $5",
-        x,
-        y,
+        r#"UPDATE magnets
+         SET coords = ST_MakePoint($1::INTEGER, $2::INTEGER), rotation = $3, last_modifier = $4
+         WHERE id = $5"#,
+        magnet.x,
+        magnet.y,
         magnet.rotation,
         request_id,
         magnet.id
