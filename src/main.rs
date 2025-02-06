@@ -5,13 +5,10 @@ mod middleware;
 mod state;
 mod websocket;
 
-use std::{net::SocketAddr, time::Duration};
+use std::{net::SocketAddr, sync::Arc};
 
 use anyhow::Result;
-use axum::{
-    http::{HeaderValue, Method},
-    Router,
-};
+use axum::{http::Method, Router};
 use error::FridgeError;
 use secrecy::ExposeSecret as _;
 use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
@@ -20,13 +17,12 @@ use tokio::{net::TcpListener, select};
 use tokio_util::sync::CancellationToken;
 use tower::ServiceBuilder;
 use tower_http::{
-    cors::{AllowOrigin, Any, CorsLayer},
+    cors::{Any, CorsLayer},
     limit::RequestBodyLimitLayer,
     timeout::TimeoutLayer,
     trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer},
     ServiceBuilderExt as _,
 };
-use tracing::Level;
 use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
 
 use crate::{
@@ -42,7 +38,7 @@ fn main() -> Result<()> {
 
     tracing_subscriber::fmt()
         .with_target(true)
-        .with_max_level(config.log_level.unwrap_or(Level::DEBUG))
+        .with_max_level(config.log_level)
         .pretty()
         .finish()
         .with(sentry::integrations::tracing::layer())
@@ -54,8 +50,8 @@ fn main() -> Result<()> {
             dsn.expose_secret(),
             sentry::ClientOptions {
                 release: sentry::release_name!(),
-                sample_rate: config.error_sample_rate.unwrap_or(1.0),
-                traces_sample_rate: config.trace_sample_rate.unwrap_or(0.1),
+                sample_rate: config.error_sample_rate,
+                traces_sample_rate: config.trace_sample_rate,
                 attach_stacktrace: true,
                 ..Default::default()
             },
@@ -73,18 +69,6 @@ async fn run(config: Config) -> Result<()> {
         .max_connections(5)
         .connect(config.postgres_url.expose_secret())
         .await?;
-
-    // TEMPORARY LOL
-    sqlx::query("DROP TABLE IF EXISTS magnets")
-        .execute(&pool)
-        .await?;
-    sqlx::query("DROP INDEX IF EXISTS idx_magnets_geom")
-        .execute(&pool)
-        .await?;
-    sqlx::query("DROP TABLE IF EXISTS _sqlx_migrations")
-        .execute(&pool)
-        .await?;
-    sqlx::migrate!("./migrations").run(&pool).await?;
 
     let token = CancellationToken::new();
     let mut listener = PgListener::connect_with(&pool)
@@ -108,20 +92,17 @@ async fn run(config: Config) -> Result<()> {
                     res = listener.recv() => {
                         match res {
                             Ok(msg) => {
-                                tracing::info!("Received message: {}", msg.payload());
                                 tx.send(msg.payload().to_string()).unwrap();
                             }
-                            Err(e) => tracing::error!("Error from listener: {}", e),
+                            Err(e) => {
+                                tracing::error!("Error from listener: {}", e);
+                            }
                         }
                     }
                 }
             }
         })
     };
-
-    let timeout = config
-        .request_timeout_seconds
-        .unwrap_or(Duration::from_secs(2));
 
     let service_builder = ServiceBuilder::new()
         .set_x_request_id(MakeRequestUuidV7)
@@ -135,23 +116,18 @@ async fn run(config: Config) -> Result<()> {
         )
         .propagate_x_request_id()
         .layer(RequestBodyLimitLayer::new(1024))
-        .layer(TimeoutLayer::new(timeout))
+        .layer(TimeoutLayer::new(config.request_timeout))
         .layer(
             CorsLayer::new()
                 .allow_methods([Method::GET, Method::PUT, Method::OPTIONS])
-                .allow_origin(
-                    config
-                        .cors_origin
-                        .and_then(|s| HeaderValue::from_str(s.as_str()).ok())
-                        .map(AllowOrigin::from)
-                        .unwrap_or(Any.into()),
-                )
+                .allow_origin(config.cors_origin.clone())
                 .allow_headers(Any),
         );
 
     let app_state = AppState {
         postgres: pool,
         magnet_updates: tx,
+        config: Arc::new(config),
     };
 
     let app = Router::new()

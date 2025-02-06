@@ -11,7 +11,7 @@ use axum::{
     Router,
 };
 use futures_util::FutureExt;
-use tokio::time::{timeout, Duration};
+use tokio::time::timeout;
 
 use crate::{error::FridgeError, state::AppState};
 
@@ -51,8 +51,7 @@ async fn handle_socket(
     let mut rx = state.magnet_updates.subscribe();
 
     loop {
-        // TODO configurable heartbeat interval
-        match timeout(Duration::from_secs(5), rx.recv()).await {
+        match timeout(state.config.ws_heartbeat_interval, rx.recv()).await {
             Ok(magnet_update) => {
                 let magnet_update = magnet_update.unwrap();
                 socket.send(magnet_update.into()).await.unwrap();
