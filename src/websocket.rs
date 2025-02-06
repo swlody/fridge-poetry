@@ -11,9 +11,13 @@ use axum::{
     Router,
 };
 use futures_util::FutureExt;
-use tokio::time::timeout;
+use tokio::select;
 
-use crate::{error::FridgeError, state::AppState};
+use crate::{
+    error::FridgeError,
+    geometry::{Point, Window},
+    state::AppState,
+};
 
 #[tracing::instrument]
 async fn ws_handler(
@@ -21,6 +25,8 @@ async fn ws_handler(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
+    // TODO limit to number of open WebSocket connections per IP?
+
     ws.on_upgrade(move |socket| {
         handle_socket(socket, addr, state).map(|res| {
             if let Err(e) = res {
@@ -30,7 +36,6 @@ async fn ws_handler(
     })
 }
 
-#[tracing::instrument]
 async fn heartbeat(socket: &mut WebSocket) -> bool {
     socket
         .send(Message::Ping(Bytes::from_static(b"heartbeat")))
@@ -49,22 +54,42 @@ async fn handle_socket(
     }
 
     let mut rx = state.magnet_updates.subscribe();
+    let mut client_window = Window::default();
 
     loop {
-        match timeout(state.config.ws_heartbeat_interval, rx.recv()).await {
-            Ok(magnet_update) => {
-                let magnet_update = magnet_update.unwrap();
-                socket.send(magnet_update.into()).await.unwrap();
-            }
-            Err(_) => {
-                if !heartbeat(&mut socket).await {
-                    break;
+        select! {
+            // Update to a magnet entity from Postgres
+            magnet_update = rx.recv() => {
+                let magnet_update = magnet_update.expect("Broadcast sender unexpectedly dropped");
+                if client_window.contains(Point::new(magnet_update.x, magnet_update.y)) {
+                    let magnet_update = serde_json::to_string(&magnet_update).unwrap();
+                    if socket.send(magnet_update.into()).await.is_err() {
+                        tracing::debug!("Error sending magnet update to client");
+                        break;
+                    }
                 }
-            }
+            },
+
+            // Update to watch window from WebSocket
+            message = socket.recv() => {
+                match message {
+                    Some(Ok(Message::Text(text))) => {
+                        if let Ok(window_update) = serde_json::from_str(&text) {
+                            client_window = window_update;
+                        }
+                    }
+                    Some(Ok(Message::Close(close))) => {
+                        tracing::debug!("Socket closed by client: {close:?}");
+                        break;
+                    }
+                    thing => {
+                        tracing::debug!("Received unexpected message over websocket: {thing:?}")
+                    },
+                }
+            },
         }
     }
 
-    tracing::debug!("Socket disconnected: {:?}", who);
     Ok(())
 }
 

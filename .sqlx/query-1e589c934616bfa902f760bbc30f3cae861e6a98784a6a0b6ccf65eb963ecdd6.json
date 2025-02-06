@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, ST_X(coords)::INTEGER AS \"x!\", ST_Y(coords)::INTEGER AS \"y!\", rotation, word\n        FROM magnets\n        WHERE coords && ST_MakeEnvelope($1::INTEGER, $2::INTEGER, $3::INTEGER, $4::INTEGER)",
+  "query": "SELECT id, ST_X(coords)::INTEGER AS \"x!\", ST_Y(coords)::INTEGER AS \"y!\", rotation, word\n           FROM magnets\n           WHERE coords && ST_MakeEnvelope($1::INTEGER, $2::INTEGER, $3::INTEGER, $4::INTEGER)",
   "describe": {
     "columns": [
       {
@@ -45,5 +45,5 @@
       false
     ]
   },
-  "hash": "6e63045f63fcd1896282344278b6e57781e2cebe05e0a2f1968c4746875f764f"
+  "hash": "1e589c934616bfa902f760bbc30f3cae861e6a98784a6a0b6ccf65eb963ecdd6"
 }

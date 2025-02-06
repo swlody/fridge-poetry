@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE magnets\n           SET coords = ST_MakePoint($1::INTEGER, $2::INTEGER), rotation = $3, last_modifier = $4\n           WHERE id = $5",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4",
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1502c8025d5121c6bcb8370a04435b4cd5c60aa000287330f959e224d1f9f291"
+}

@@ -9,7 +9,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{error::FridgeError, state::AppState};
+use crate::{error::FridgeError, geometry::Window, state::AppState};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct Magnet {
@@ -20,14 +20,6 @@ struct Magnet {
     word: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct Window {
-    min_x: i32,
-    min_y: i32,
-    max_x: i32,
-    max_y: i32,
-}
-
 #[tracing::instrument]
 async fn magnets(
     State(state): State<AppState>,
@@ -36,8 +28,8 @@ async fn magnets(
     let magnets: Vec<Magnet> = sqlx::query_as!(
         Magnet,
         r#"SELECT id, ST_X(coords)::INTEGER AS "x!", ST_Y(coords)::INTEGER AS "y!", rotation, word
-        FROM magnets
-        WHERE coords && ST_MakeEnvelope($1::INTEGER, $2::INTEGER, $3::INTEGER, $4::INTEGER)"#,
+           FROM magnets
+           WHERE coords && ST_MakeEnvelope($1::INTEGER, $2::INTEGER, $3::INTEGER, $4::INTEGER)"#,
         window.min_x,
         window.min_y,
         window.max_x,
@@ -63,8 +55,8 @@ async fn update_magnet(
 
     sqlx::query!(
         r#"UPDATE magnets
-         SET coords = ST_MakePoint($1::INTEGER, $2::INTEGER), rotation = $3, last_modifier = $4
-         WHERE id = $5"#,
+           SET coords = ST_MakePoint($1::INTEGER, $2::INTEGER), rotation = $3, last_modifier = $4
+           WHERE id = $5"#,
         magnet.x,
         magnet.y,
         magnet.rotation,
@@ -77,6 +69,7 @@ async fn update_magnet(
     Ok(StatusCode::OK)
 }
 
+#[tracing::instrument]
 async fn health_check(State(state): State<AppState>) -> impl IntoResponse {
     if state.postgres.is_closed() {
         StatusCode::INTERNAL_SERVER_ERROR
