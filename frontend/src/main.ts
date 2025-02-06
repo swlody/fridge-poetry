@@ -12,6 +12,13 @@ interface Magnet {
   zIndex: number;
 }
 
+interface Window {
+  min_x: number;
+  min_y: number;
+  max_x: number;
+  max_y: number;
+}
+
 function getMagnetDiv(magnet: Magnet): string {
   return `
   <div class="magnet" id=${magnet.id} style="left: ${magnet.x}px; top: ${magnet.y}px; rotate: ${magnet.rotation}deg; z-index: ${magnet.zIndex};">
@@ -21,30 +28,63 @@ function getMagnetDiv(magnet: Magnet): string {
   </div>`;
 }
 
+const webSocket = new WebSocket(WS_URL);
+
+webSocket.onmessage = (e) => {
+  // TODO what if it's something else?
+  const update = JSON.parse(e.data);
+
+  console.log("Received magnet update");
+
+  // TODO bleh
+  if (magnets.get(update.id)) {
+    const magnet = magnets.get(update.id)!;
+    magnets.set(update.id, {
+      id: update.id,
+      x: update.x,
+      y: update.y,
+      rotation: update.rotation,
+      word: magnet.word,
+      zIndex: ++globalzIndex,
+    });
+
+    const element = document.getElementById(update.id.toString())!;
+
+    element.style.left = update.x + "px";
+    element.style.top = update.y + "px";
+    element.style.rotate = update.rotation + "deg";
+    element.style.zIndex = String(globalzIndex);
+  }
+};
+
 const door = document.querySelector<HTMLDivElement>("#door")!;
 
 const magnets = new Map<number, Magnet>();
 let globalzIndex = 0;
 async function replaceMagnets() {
-  const min_x = Math.floor(
-    (-1 * door.getBoundingClientRect().left) -
-      (globalThis.innerWidth),
-  );
-  const min_y = Math.floor(
-    (-1 * door.getBoundingClientRect().top) -
-      (globalThis.innerHeight),
-  );
-  const max_x = Math.floor(
-    (-1 * door.getBoundingClientRect().left) +
-      (2 * globalThis.innerWidth),
-  );
-  const max_y = Math.floor(
-    (-1 * door.getBoundingClientRect().top) +
-      (2 * globalThis.innerHeight),
-  );
+  const window: Window = {
+    min_x: Math.floor(
+      (-1 * door.getBoundingClientRect().left) -
+        (globalThis.innerWidth),
+    ),
+    min_y: Math.floor(
+      (-1 * door.getBoundingClientRect().top) -
+        (globalThis.innerHeight),
+    ),
+    max_x: Math.floor(
+      (-1 * door.getBoundingClientRect().left) +
+        (2 * globalThis.innerWidth),
+    ),
+    max_y: Math.floor(
+      (-1 * door.getBoundingClientRect().top) +
+        (2 * globalThis.innerHeight),
+    ),
+  };
+
+  webSocket.send(JSON.stringify(window));
 
   const magnetArray = await fetch(
-    `${API_URL}/magnets?min_x=${min_x}&min_y=${min_y}&max_x=${max_x}&max_y=${max_y}`,
+    `${API_URL}/magnets?min_x=${window.min_x}&min_y=${window.min_y}&max_x=${window.max_x}&max_y=${window.max_y}`,
   ).then((r) => r.json());
 
   let divs = "";
@@ -132,52 +172,31 @@ async function replaceMagnets() {
   });
 }
 
-// TODO loading indicator on initial page load
-globalThis.onload = async () => {
-  await replaceMagnets();
-};
-
 let baseOffsetX: number = 0;
 let baseOffsetY: number = 0;
 let isDraggingDoor = false;
-document.addEventListener("mousedown", (e) => {
-  isDraggingDoor = true;
-
-  baseOffsetX = Math.floor(e.clientX - door.getBoundingClientRect().left);
-  baseOffsetY = Math.floor(e.clientY - door.getBoundingClientRect().top);
-});
-
-document.addEventListener("mousemove", (e) => {
-  if (!isDraggingDoor) return;
-
-  door.style.left = Math.floor(e.clientX - baseOffsetX) + "px";
-  door.style.top = Math.floor(e.clientY - baseOffsetY) + "px";
-});
-
-document.addEventListener("mouseup", async () => {
-  if (!isDraggingDoor) return;
-  isDraggingDoor = false;
-
+webSocket.onopen = async () => {
+  console.log("websocket opened");
   await replaceMagnets();
-});
 
-const webSocket = new WebSocket(WS_URL);
-webSocket.onmessage = (e) => {
-  const update = JSON.parse(e.data);
-  if (magnets.get(update.id)) {
-    const magnet = magnets.get(update.id)!;
-    magnets.set(update.id, {
-      id: update.id,
-      x: update.x,
-      y: update.y,
-      rotation: update.rotation,
-      word: magnet.word,
-      zIndex: ++globalzIndex,
-    });
-    const element = document.getElementById(update.id.toString())!;
-    element.style.left = update.x + "px";
-    element.style.top = update.y + "px";
-    element.style.rotate = update.rotation + "deg";
-    element.style.zIndex = String(globalzIndex);
-  }
+  document.addEventListener("mousedown", (e) => {
+    isDraggingDoor = true;
+
+    baseOffsetX = Math.floor(e.clientX - door.getBoundingClientRect().left);
+    baseOffsetY = Math.floor(e.clientY - door.getBoundingClientRect().top);
+  });
+
+  document.addEventListener("mousemove", (e) => {
+    if (!isDraggingDoor) return;
+
+    door.style.left = Math.floor(e.clientX - baseOffsetX) + "px";
+    door.style.top = Math.floor(e.clientY - baseOffsetY) + "px";
+  });
+
+  document.addEventListener("mouseup", async () => {
+    if (!isDraggingDoor) return;
+    isDraggingDoor = false;
+
+    await replaceMagnets();
+  });
 };

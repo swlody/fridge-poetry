@@ -1,11 +1,12 @@
 mod api;
 mod config;
 mod error;
+mod geometry;
 mod middleware;
 mod state;
 mod websocket;
 
-use std::{net::SocketAddr, sync::Arc};
+use std::net::SocketAddr;
 
 use anyhow::Result;
 use axum::{http::Method, Router};
@@ -28,7 +29,7 @@ use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _
 use crate::{
     config::Config,
     middleware::{MakeRequestUuidV7, SentryReportRequestInfoLayer},
-    state::AppState,
+    state::{AppState, MagnetUpdate},
 };
 
 fn main() -> Result<()> {
@@ -44,9 +45,9 @@ fn main() -> Result<()> {
         .with(sentry::integrations::tracing::layer())
         .try_init()?;
 
-    let _sentry_guard = config.sentry_dsn.as_ref().map(|dsn| {
+    let _sentry_guard = if let Some(dsn) = config.sentry_dsn.as_ref() {
         tracing::info!("Initializing Sentry client");
-        sentry::init((
+        Some(sentry::init((
             dsn.expose_secret(),
             sentry::ClientOptions {
                 release: sentry::release_name!(),
@@ -55,13 +56,48 @@ fn main() -> Result<()> {
                 attach_stacktrace: true,
                 ..Default::default()
             },
-        ))
-    });
+        )))
+    } else {
+        tracing::warn!("Skipping Sentry initialization due to missing SENTRY_DSN");
+        None
+    };
 
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?
         .block_on(run(config))
+}
+
+async fn change_broadcast_task(
+    tx: tokio::sync::broadcast::Sender<MagnetUpdate>,
+    token: CancellationToken,
+    mut pg_change_listener: PgListener,
+) {
+    loop {
+        select! {
+            _ = token.cancelled() => {
+                tracing::info!("Exiting change broadcast task due to token cancellation");
+                break;
+            },
+            res = pg_change_listener.recv() => {
+                match res {
+                    Ok(msg) => {
+                        let magnet_update = serde_json::from_str(&msg.payload()).expect("Received invalid JSON from postgres");
+                        if tx.len() >= 10 {
+                            tracing::error!(
+                                "Potentially dropping queued random numbers. Consider increasing \
+                                the capacity of the broadcast channel."
+                            );
+                        }
+                        tx.send(magnet_update).expect("All receivers unexpectedly dropped");
+                    }
+                    Err(e) => {
+                        tracing::error!("Error from listener: {}", e);
+                    }
+                }
+            }
+        }
+    }
 }
 
 async fn run(config: Config) -> Result<()> {
@@ -70,40 +106,19 @@ async fn run(config: Config) -> Result<()> {
         .connect(config.postgres_url.expose_secret())
         .await?;
 
-    let token = CancellationToken::new();
-    let mut listener = PgListener::connect_with(&pool)
-        .await
-        .expect("Unable to initialize PgListener");
-    listener
-        .listen("magnet_updates")
-        .await
-        .expect("Unable to listen to magnet_updates");
-    // TODO configurably channel size
-    let (tx, _rx) = tokio::sync::broadcast::channel(10);
+    let token: CancellationToken = CancellationToken::new();
+    let mut pg_change_listener = PgListener::connect_with(&pool).await?;
+    pg_change_listener.listen("magnet_updates").await?;
 
-    let pubsub_task = {
-        let tx = tx.clone();
-        let token = token.clone();
+    let (tx, _rx) = tokio::sync::broadcast::channel(config.broadcast_capacity);
 
-        tokio::task::spawn(async move {
-            loop {
-                select! {
-                    _ = token.cancelled() => break,
-                    res = listener.recv() => {
-                        match res {
-                            Ok(msg) => {
-                                tx.send(msg.payload().to_string()).unwrap();
-                            }
-                            Err(e) => {
-                                tracing::error!("Error from listener: {}", e);
-                            }
-                        }
-                    }
-                }
-            }
-        })
-    };
+    let change_broadcast_task = tokio::task::spawn(change_broadcast_task(
+        tx.clone(),
+        token.clone(),
+        pg_change_listener,
+    ));
 
+    // TODO rate limiting
     let service_builder = ServiceBuilder::new()
         .set_x_request_id(MakeRequestUuidV7)
         .layer(NewSentryLayer::new_from_top())
@@ -120,14 +135,13 @@ async fn run(config: Config) -> Result<()> {
         .layer(
             CorsLayer::new()
                 .allow_methods([Method::GET, Method::PUT, Method::OPTIONS])
-                .allow_origin(config.cors_origin.clone())
+                .allow_origin(config.cors_origin)
                 .allow_headers(Any),
         );
 
     let app_state = AppState {
         postgres: pool,
         magnet_updates: tx,
-        config: Arc::new(config),
     };
 
     let app = Router::new()
@@ -146,7 +160,7 @@ async fn run(config: Config) -> Result<()> {
     .await?;
 
     token.cancel();
-    pubsub_task.await.unwrap();
+    change_broadcast_task.await?;
 
     Ok(())
 }

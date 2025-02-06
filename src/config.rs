@@ -11,12 +11,10 @@ pub struct Config {
     pub trace_sample_rate: f32,
     pub error_sample_rate: f32,
     pub request_timeout: Duration,
-
+    pub broadcast_capacity: usize,
     pub sentry_dsn: Option<SecretString>,
     pub postgres_url: SecretString,
     pub cors_origin: tower_http::cors::AllowOrigin,
-
-    pub ws_heartbeat_interval: Duration,
 }
 
 impl Config {
@@ -62,6 +60,15 @@ impl Config {
                 .map(Duration::from_secs)
                 .unwrap_or(Duration::from_secs(2)),
 
+            broadcast_capacity: std::env::var("FRIDGE_BROADCAST_CAPACITY")
+                .ok()
+                .map(|capacity| {
+                    capacity
+                        .parse()
+                        .unwrap_or_else(|_| panic!("Invalid broadcast capacity: {capacity}"))
+                })
+                .unwrap_or(10),
+
             sentry_dsn: std::env::var("FRIDGE_SENTRY_DSN")
                 .ok()
                 .map(SecretString::from),
@@ -75,16 +82,6 @@ impl Config {
                 .and_then(|s| HeaderValue::from_str(s.as_str()).ok())
                 .map(AllowOrigin::from)
                 .unwrap_or(Any.into()),
-
-            ws_heartbeat_interval: std::env::var("FRIDGE_WS_HEARTBEAT_INTERVAL_SECONDS")
-                .ok()
-                .map(|i| {
-                    i.parse().unwrap_or_else(|i| {
-                        panic!("Invalid value for FRIDGE_WS_HEARTBEAT_INTERVAL_SECONDS: {i}")
-                    })
-                })
-                .map(Duration::from_secs)
-                .unwrap_or(Duration::from_secs(5)),
         }
     }
 }
