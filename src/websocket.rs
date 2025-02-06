@@ -62,6 +62,7 @@ async fn handle_socket(
             magnet_update = rx.recv() => {
                 let magnet_update = magnet_update.expect("Broadcast sender unexpectedly dropped");
                 if client_window.contains(Point::new(magnet_update.x, magnet_update.y)) {
+                    // TODO also need to send update if magnet that was previously in bounds goes out of bounds
                     let magnet_update = serde_json::to_string(&magnet_update).unwrap();
                     if socket.send(magnet_update.into()).await.is_err() {
                         tracing::debug!("Error sending magnet update to client");
