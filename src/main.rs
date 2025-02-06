@@ -15,8 +15,9 @@ use axum::{
 use error::FridgeError;
 use secrecy::ExposeSecret as _;
 use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
-use state::AppState;
-use tokio::net::TcpListener;
+use sqlx::postgres::PgListener;
+use tokio::{net::TcpListener, select};
+use tokio_util::sync::CancellationToken;
 use tower::ServiceBuilder;
 use tower_http::{
     cors::{AllowOrigin, Any, CorsLayer},
@@ -31,6 +32,7 @@ use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _
 use crate::{
     config::Config,
     middleware::{MakeRequestUuidV7, SentryReportRequestInfoLayer},
+    state::AppState,
 };
 
 fn main() -> Result<()> {
@@ -76,10 +78,46 @@ async fn run(config: Config) -> Result<()> {
     sqlx::query("DROP TABLE IF EXISTS magnets")
         .execute(&pool)
         .await?;
+    sqlx::query("DROP INDEX IF EXISTS idx_magnets_geom")
+        .execute(&pool)
+        .await?;
     sqlx::query("DROP TABLE IF EXISTS _sqlx_migrations")
         .execute(&pool)
         .await?;
     sqlx::migrate!("./migrations").run(&pool).await?;
+
+    let token = CancellationToken::new();
+    let mut listener = PgListener::connect_with(&pool)
+        .await
+        .expect("Unable to initialize PgListener");
+    listener
+        .listen("magnet_updates")
+        .await
+        .expect("Unable to listen to magnet_updates");
+    // TODO configurably channel size
+    let (tx, _rx) = tokio::sync::broadcast::channel(10);
+
+    let pubsub_task = {
+        let tx = tx.clone();
+        let token = token.clone();
+
+        tokio::task::spawn(async move {
+            loop {
+                select! {
+                    _ = token.cancelled() => break,
+                    res = listener.recv() => {
+                        match res {
+                            Ok(msg) => {
+                                tracing::info!("Received message: {}", msg.payload());
+                                tx.send(msg.payload().to_string()).unwrap();
+                            }
+                            Err(e) => tracing::error!("Error from listener: {}", e),
+                        }
+                    }
+                }
+            }
+        })
+    };
 
     let timeout = config
         .request_timeout_seconds
@@ -111,7 +149,10 @@ async fn run(config: Config) -> Result<()> {
                 .allow_headers(Any),
         );
 
-    let app_state = AppState { postgres: pool };
+    let app_state = AppState {
+        postgres: pool,
+        magnet_updates: tx,
+    };
 
     let app = Router::new()
         .merge(api::routes())
@@ -127,6 +168,9 @@ async fn run(config: Config) -> Result<()> {
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
     .await?;
+
+    token.cancel();
+    pubsub_task.await.unwrap();
 
     Ok(())
 }

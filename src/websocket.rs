@@ -11,7 +11,7 @@ use axum::{
     Router,
 };
 use futures_util::FutureExt;
-use tokio::time::Duration;
+use tokio::time::{timeout, Duration};
 
 use crate::{error::FridgeError, state::AppState};
 
@@ -48,11 +48,20 @@ async fn handle_socket(
         return Err(anyhow::anyhow!("Failed to ping new connection").into());
     }
 
-    loop {
-        tokio::time::sleep(Duration::from_secs(5)).await;
+    let mut rx = state.magnet_updates.subscribe();
 
-        if !heartbeat(&mut socket).await {
-            break;
+    loop {
+        // TODO configurable heartbeat interval
+        match timeout(Duration::from_secs(5), rx.recv()).await {
+            Ok(magnet_update) => {
+                let magnet_update = magnet_update.unwrap();
+                socket.send(magnet_update.into()).await.unwrap();
+            }
+            Err(_) => {
+                if !heartbeat(&mut socket).await {
+                    break;
+                }
+            }
         }
     }
 

@@ -2,27 +2,53 @@ CREATE EXTENSION IF NOT EXISTS postgis;
 
 CREATE TABLE IF NOT EXISTS magnets (
     id SERIAL PRIMARY KEY,
-    geom geometry(Point, 0) NOT NULL,
+    coords geometry(Point) NOT NULL,
     rotation INTEGER NOT NULL,
     word TEXT NOT NULL,
     last_modifier UUID
 );
 
+-- TODO this should really be a seed or something
 WITH words_array AS (
-    SELECT array['&','a','about','above','ache','ad','after','all','am','an','and','apparatus','are','arm','as','ask','at','away','bare','be','beat','beauty','bed','beneath','bitter','black','blood','blow','blue','boil','boy','breast','but','butt','by','can','chant','chocolate','cool','could','crush','cry','d','day','death','delirious','diamond','did','do','dream','dress','drive','drool','drunk','eat','ed','egg','elaborate','enormous','er','es','est','fast','feet','fiddle','finger','fluff','for','forest','frantic','friend','from','garden','girl','go','goddess','gorgeous','gown','hair','has','have','he','head','heave','her','here','him','his','honey','hot','how','I','if','in','ing','is','it','juice','lake','language','languid','lather','lazy','less','let','lick','lie','life','light','like','live','love','luscious','lust','ly','mad','man','me','mean','meat','men','milk','mist','moan','moon','mother','music','must','my','need','never','no','not','of','on','one','or','our','over','pant','peach','petal','picture','pink','play','please','pole','pound','puppy','purple','put','r','rain','raw','recall','red','repulsive','rip','rock','rose','run','rust','s','sad','said','sausage','say','scream','sea','see','shadow','she','shine','ship','shot','show','sing','sit','skin','sky','sleep','smear','smell','smooth','so','soar','some','sordid','spray','spring','still','stop','storm','suit','summer','sun','sweat','sweet','swim','symphony','the','their','there','these','they','those','though','thousand','through','time','tiny','to','together','tongue','trudge','TV','ugly','up','urge','us','use','want','was','watch','water','wax','we','were','what','when','whisper','who','why','will','wind','with','woman','worship','y','yet','yo']
+    SELECT array['&','&','a','a','a','a','a','a','about','above','ache','ad','after','all','am','am','an','an','and','and','and','and','apparatus','are','are','arm','as','as','as','as','ask','at','at','at','away','bare','be','beat','beauty','bed','beneath','bitter','black','blood','blow','blue','boil','boy','breast','but','but','but','but','butt','by','by','can','chant','chocolate','cool','could','crush','cry','d','day','death','delirious','diamond','did','do','do','dream','dress','drive','drool','drunk','eat','ed','ed','ed','ed','egg','elaborate','enormous','er','es','est','fast','feet','fiddle','finger','fluff','for','forest','frantic','friend','from','from','garden','girl','go','goddess','gorgeous','gown','hair','has','have','have','he','he','head','heave','her','her','here','him','his','his','honey','hot','how','I','I','I','I','if','in','in','in','ing','ing','ing','ing','ing','ing','is','is','is','is','is','it','it','it','juice','lake','language','languid','lather','lazy','less','let','lick','lie','life','light','like','like','like','live','love','luscious','lust','ly','ly','ly','ly','mad','man','me','me','me','mean','meat','men','milk','mist','moan','moon','mother','music','must','my','my','my','need','never','no','no','not','not','of','of','of','of','on','on','one','or','our','over','pant','peach','petal','picture','pink','play','please','pole','pound','puppy','purple','put','r','r','rain','raw','recall','red','repulsive','rip','rock','rose','run','rust','s','s','s','s','s','s','s','s','s','s','s','sad','said','sausage','say','scream','sea','see','shadow','she','she','shine','ship','shot','show','sing','sit','skin','sky','sleep','smear','smell','smooth','so','soar','some','sordid','spray','spring','still','stop','storm','suit','summer','sun','sweat','sweet','swim','symphony','the','the','the','the','the','their','there','these','they','those','though','thousand','through','time','tiny','to','to','to','together','tongue','trudge','TV','ugly','up','urge','us','use','want','want','was','watch','water','wax','we','we','were','what','when','whisper','who','why','will','wind','with','with','woman','worship','y','y','y','y','yet','you','you','you','you']
 AS arr
 )
-INSERT INTO magnets (geom, rotation, word, last_modifier)
+INSERT INTO magnets (coords, rotation, word, last_modifier)
 SELECT
     ST_MakePoint(
-        (random() * 400001)::int - 200000,
-        (random() * 400001)::int - 200000
-    )::geometry(Point, 0),
-    (random() * 11)::int - 5 AS rotation,
-    arr[1 + (random() * (array_length(arr, 1) - 1))::int] AS word,
+        FLOOR(random() * 400001 - 200000)::INTEGER,
+        FLOOR(random() * 400001 - 200000)::INTEGER
+    )::geometry(Point),
+    -- Postgres 17 should allow for random(-5, 5) instead
+    FLOOR(random() * 11 - 5)::INTEGER,
+    arr[1 + (random() * (array_length(arr, 1) - 1))::INTEGER] AS word,
     NULL
 FROM words_array
-CROSS JOIN generate_series(1, 4000000);
+CROSS JOIN generate_series(1, 2000000);
 
-CREATE INDEX idx_magnets_geom ON magnets USING gist(geom);
-CLUSTER magnets USING idx_magnets_geom;
+-- TODO separate migration?
+CREATE INDEX idx_magnets_coords ON magnets USING gist(coords);
+-- TODO understand this better. Does it need to be done regularly as maintenance?
+-- If so, how?
+-- Other maintanence tasks?
+-- https://postgis.net/workshops/postgis-intro/clusterindex.html
+CLUSTER magnets USING idx_magnets_coords;
+
+CREATE OR REPLACE FUNCTION notify_change() RETURNS TRIGGER AS $$
+  DECLARE
+    payload TEXT;
+  BEGIN
+    payload := json_build_object(
+      'id', NEW.id,
+      'x', ST_X(NEW.coords)::INTEGER,
+      'y', ST_Y(NEW.coords)::INTEGER,
+      'rotation', NEW.rotation
+    );
+    PERFORM pg_notify('magnet_updates', payload);
+    RETURN NULL;
+  END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER table_change
+  AFTER UPDATE ON magnets
+  FOR EACH ROW EXECUTE PROCEDURE notify_change();
