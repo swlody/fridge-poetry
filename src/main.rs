@@ -11,6 +11,7 @@ use std::net::SocketAddr;
 use anyhow::Result;
 use axum::{http::Method, Router};
 use error::FridgeError;
+use mimalloc::MiMalloc;
 use secrecy::ExposeSecret as _;
 use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
 use sqlx::postgres::PgListener;
@@ -31,6 +32,9 @@ use crate::{
     middleware::{MakeRequestUuidV7, SentryReportRequestInfoLayer},
     state::{AppState, MagnetUpdate},
 };
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() -> Result<()> {
     rubenvy::rubenvy_auto()?;
