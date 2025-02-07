@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE magnets\n           SET coords = point($1::int, $2::int), rotation = $3, last_modifier = $4\n           WHERE id = $5",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4",
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "06751d5a9dd10a57fe6348149440e337d9a3e35a20544f6dde38b50c42ab1860"
+}
