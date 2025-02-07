@@ -27,6 +27,7 @@ body {
   background-position: calc(0px - var(--canvas-x)) calc(0px - var(--canvas-y));
   background-size: 1250px 700px;
   background-repeat: repeat;
+  touch-action: none;
 }
 
 footer {

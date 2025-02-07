@@ -50,7 +50,8 @@ async fn handle_socket(
             magnet_update = rx.recv() => {
                 let magnet_update = magnet_update.expect("Broadcast sender unexpectedly dropped");
                 if client_window.contains(Point::new(magnet_update.old_x, magnet_update.old_y))
-                    || client_window.contains(Point::new(magnet_update.new_x, magnet_update.new_y)){
+                    || client_window.contains(Point::new(magnet_update.new_x, magnet_update.new_y))
+                {
                     // TODO also need to send update if magnet that was previously in bounds goes out of bounds
                     let magnet_update = serde_json::to_string(&magnet_update).unwrap();
                     if socket.send(magnet_update.into()).await.is_err() {
@@ -58,7 +59,7 @@ async fn handle_socket(
                         break;
                     }
                 }
-            },
+            }
 
             // Update to watch window from WebSocket
             message = socket.recv() => {
@@ -72,11 +73,15 @@ async fn handle_socket(
                         tracing::debug!("WebSocket closed by client: {close:?}");
                         break;
                     }
-                    thing => {
+                    Some(thing) => {
                         tracing::debug!("Received unexpected message over websocket: {thing:?}")
-                    },
+                    }
+                    None => {
+                        tracing::debug!("WebSocket disconnected");
+                        break;
+                    }
                 }
-            },
+            }
         }
     }
 
