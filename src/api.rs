@@ -27,9 +27,9 @@ async fn magnets(
 ) -> Result<impl IntoResponse, FridgeError> {
     let magnets: Vec<Magnet> = sqlx::query_as!(
         Magnet,
-        r#"SELECT id, ST_X(coords)::INTEGER AS "x!", ST_Y(coords)::INTEGER AS "y!", rotation, word
+        r#"SELECT id, coords[0]::int AS "x!", coords[1]::int AS "y!", rotation, word
            FROM magnets
-           WHERE coords && ST_MakeEnvelope($1::INTEGER, $2::INTEGER, $3::INTEGER, $4::INTEGER)"#,
+           WHERE coords <@ box(point($1::int, $2::int), point($3::int, $4::int))"#,
         window.min_x,
         window.min_y,
         window.max_x,
@@ -55,7 +55,7 @@ async fn update_magnet(
 
     sqlx::query!(
         r#"UPDATE magnets
-           SET coords = ST_MakePoint($1::INTEGER, $2::INTEGER), rotation = $3, last_modifier = $4
+           SET coords = point($1::int, $2::int), rotation = $3, last_modifier = $4
            WHERE id = $5"#,
         magnet.x,
         magnet.y,

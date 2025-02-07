@@ -52,7 +52,6 @@ async fn handle_socket(
                 if client_window.contains(Point::new(magnet_update.old_x, magnet_update.old_y))
                     || client_window.contains(Point::new(magnet_update.new_x, magnet_update.new_y))
                 {
-                    // TODO also need to send update if magnet that was previously in bounds goes out of bounds
                     let magnet_update = serde_json::to_string(&magnet_update).unwrap();
                     if socket.send(magnet_update.into()).await.is_err() {
                         tracing::debug!("Error sending magnet update to client");
