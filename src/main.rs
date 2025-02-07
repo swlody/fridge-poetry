@@ -72,7 +72,7 @@ fn main() -> Result<()> {
         .block_on(run(config))
 }
 
-async fn change_broadcast_task(
+async fn broadcast_changes(
     tx: tokio::sync::broadcast::Sender<MagnetUpdate>,
     token: CancellationToken,
     mut pg_change_listener: PgListener,
@@ -116,7 +116,7 @@ async fn run(config: Config) -> Result<()> {
 
     let (tx, _rx) = tokio::sync::broadcast::channel(config.broadcast_capacity);
 
-    let change_broadcast_task = tokio::task::spawn(change_broadcast_task(
+    let broadcast_changes_task = tokio::task::spawn(broadcast_changes(
         tx.clone(),
         token.clone(),
         pg_change_listener,
@@ -164,7 +164,7 @@ async fn run(config: Config) -> Result<()> {
     .await?;
 
     token.cancel();
-    change_broadcast_task.await?;
+    broadcast_changes_task.await?;
 
     Ok(())
 }
