@@ -24,8 +24,6 @@ async fn ws_handler(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    // TODO limit to number of open WebSocket connections per IP?
-
     ws.on_upgrade(move |socket| {
         handle_socket(socket, addr, state).map(|res| {
             if let Err(e) = res {

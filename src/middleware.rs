@@ -37,14 +37,12 @@ fn convert_http_status_to_sentry_status(http_status: StatusCode) -> SpanStatus {
         StatusCode::UNAUTHORIZED => SpanStatus::Unauthenticated,
         StatusCode::FORBIDDEN => SpanStatus::PermissionDenied,
         StatusCode::NOT_FOUND => SpanStatus::NotFound,
+        StatusCode::REQUEST_TIMEOUT => SpanStatus::DeadlineExceeded,
         StatusCode::CONFLICT => SpanStatus::AlreadyExists,
         StatusCode::PRECONDITION_FAILED => SpanStatus::FailedPrecondition,
         StatusCode::TOO_MANY_REQUESTS => SpanStatus::ResourceExhausted,
         StatusCode::NOT_IMPLEMENTED => SpanStatus::Unimplemented,
         StatusCode::SERVICE_UNAVAILABLE => SpanStatus::Unavailable,
-
-        // TODO remove if switching which status code is used for timeouts
-        StatusCode::REQUEST_TIMEOUT => SpanStatus::DeadlineExceeded,
 
         other => {
             let code = other.as_u16();

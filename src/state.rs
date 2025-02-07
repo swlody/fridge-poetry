@@ -8,6 +8,7 @@ pub struct MagnetUpdate {
     pub new_x: i32,
     pub new_y: i32,
     pub rotation: f32,
+    pub z_index: i64,
 }
 
 #[derive(Clone, Debug)]

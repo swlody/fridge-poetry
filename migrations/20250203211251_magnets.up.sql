@@ -1,7 +1,8 @@
 CREATE TABLE IF NOT EXISTS magnets (
   id SERIAL PRIMARY KEY,
-  coords Point NOT NULL,
+  coords POINT NOT NULL,
   rotation INTEGER NOT NULL,
+  z_index BIGSERIAL NOT NULL,
   word TEXT NOT NULL,
   last_modifier UUID
 );
@@ -42,7 +43,8 @@ CREATE OR REPLACE FUNCTION notify_change() RETURNS TRIGGER AS $$
       'old_y', OLD.coords[1],
       'new_x', NEW.coords[0],
       'new_y', NEW.coords[1],
-      'rotation', NEW.rotation
+      'rotation', NEW.rotation,
+      'z_index', NEW.z_index
     );
     PERFORM pg_notify('magnet_updates', payload);
     RETURN NULL;

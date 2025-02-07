@@ -3,7 +3,6 @@ import "./style.css";
 const API_URL = import.meta.env.VITE_API_BASE_URL || "api";
 const WS_URL = import.meta.env.VITE_WS_BASE_URL || "ws";
 
-// TODO is this necessary?
 class Magnet {
   id: number;
   x: number;
@@ -38,13 +37,6 @@ class Window {
   max_y: number;
 
   constructor(min_x: number, min_y: number, max_x: number, max_y: number) {
-    this.min_x = min_x;
-    this.min_y = min_y;
-    this.max_x = max_x;
-    this.max_y = max_y;
-  }
-
-  update(min_x: number, min_y: number, max_x: number, max_y: number) {
     this.min_x = min_x;
     this.min_y = min_y;
     this.max_x = max_x;
@@ -86,7 +78,7 @@ webSocket.onmessage = (e) => {
       magnet.x = update.new_x;
       magnet.y = update.new_y;
       magnet.rotation = update.rotation;
-      magnet.zIndex = ++globalzIndex;
+      magnet.zIndex = update.z_index;
     } else {
       // Magnet newly entered our window, add it
       const magnet = new Magnet(
@@ -95,7 +87,7 @@ webSocket.onmessage = (e) => {
         update.new_y,
         update.rotation,
         update.word,
-        ++globalzIndex,
+        update.z_index,
       );
 
       magnets.set(
@@ -111,6 +103,7 @@ webSocket.onmessage = (e) => {
     element.style.setProperty("--local-x", `${update.new_x}px`);
     element.style.setProperty("--local-y", `${update.new_y}px`);
     element.style.setProperty("--rotation", `${update.rotation}deg`);
+    element.style.zIndex = update.z_index;
   } else {
     // Magnet left our window, remove it
     magnets.delete(update.id);
@@ -124,7 +117,6 @@ let viewWindow: Window;
 // TODO right now we're keeping all magnets in memory to have a stable zIndex
 // I think this can be removed once zIndex goes in the database
 const magnets = new Map<number, Magnet>();
-let globalzIndex = 0;
 
 async function replaceMagnets() {
   webSocket.send(JSON.stringify(viewWindow));
@@ -164,13 +156,13 @@ async function replaceMagnets() {
       element.setPointerCapture(e.pointerId);
       isDragging = true;
 
+      element.style.zIndex = String(Number.MAX_SAFE_INTEGER);
+
       clickOffsetX = Math.floor(e.clientX - element.offsetLeft);
       clickOffsetY = Math.floor(e.clientY - element.offsetTop);
 
       originalX = parseInt(element.style.getPropertyValue("--local-x"));
       originalY = parseInt(element.style.getPropertyValue("--local-y"));
-
-      element.style.zIndex = String(++globalzIndex);
     }, { passive: true });
 
     document.addEventListener("pointermove", (e) => {
@@ -184,6 +176,7 @@ async function replaceMagnets() {
 
     element.addEventListener("pointerup", async (e) => {
       if (!isDragging) return;
+      e.stopPropagation();
       element.releasePointerCapture(e.pointerId);
       isDragging = false;
 
@@ -196,9 +189,8 @@ async function replaceMagnets() {
       magnet.x = newX;
       magnet.y = newY;
       magnet.rotation = rotation;
-      magnet.zIndex = globalzIndex;
 
-      await fetch(`${API_URL}/magnet`, {
+      const newZIndex = await fetch(`${API_URL}/magnet`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -207,7 +199,10 @@ async function replaceMagnets() {
           if (key == "word" || key == "zIndex") return undefined;
           else return value;
         }),
-      });
+      }).then((r) => r.text());
+
+      magnet.zIndex = parseInt(newZIndex);
+      element.style.zIndex = newZIndex;
 
       clickOffsetX = 0;
       clickOffsetY = 0;
@@ -277,12 +272,10 @@ webSocket.onopen = async () => {
     canvasX = dragX;
     canvasY = dragY;
 
-    viewWindow.update(
-      Math.floor(canvasX - globalThis.innerWidth),
-      Math.floor(canvasY - globalThis.innerHeight),
-      Math.floor(canvasX + 2 * globalThis.innerWidth),
-      Math.floor(canvasY + 2 * globalThis.innerHeight),
-    );
+    viewWindow.min_x = Math.floor(canvasX - globalThis.innerWidth);
+    viewWindow.min_y = Math.floor(canvasY - globalThis.innerHeight);
+    viewWindow.max_x = Math.floor(canvasX + 2 * globalThis.innerWidth);
+    viewWindow.max_y = Math.floor(canvasY + 2 * globalThis.innerHeight);
 
     await replaceMagnets();
 
