@@ -25,7 +25,7 @@ body {
   overflow: hidden;
   background-image: url("static/background.png");
   background-position: calc(0px - var(--canvas-x)) calc(0px - var(--canvas-y));
-  background-size: 1250px 700px;
+  background-size: 900px 600px;
   background-repeat: repeat;
   touch-action: none;
 }
