@@ -3,13 +3,62 @@ import "./style.css";
 const API_URL = import.meta.env.VITE_API_BASE_URL || "api";
 const WS_URL = import.meta.env.VITE_WS_BASE_URL || "ws";
 
-interface Magnet {
+// TODO is this necessary?
+class Magnet {
   id: number;
   x: number;
   y: number;
   rotation: number;
   word: string;
   zIndex: number;
+
+  constructor(
+    id: number,
+    x: number,
+    y: number,
+    rotation: number,
+    word: string,
+    zIndex: number,
+  ) {
+    this.id = id;
+    this.x = x;
+    this.y = y;
+    this.rotation = rotation;
+    this.word = word;
+    this.zIndex = zIndex;
+  }
+}
+
+// Window that represents the total area of magnets in the DOM
+// This is a 3x3 grid of [viewport area] centered at the actual viewport
+class Window {
+  min_x: number;
+  min_y: number;
+  max_x: number;
+  max_y: number;
+
+  constructor(min_x: number, min_y: number, max_x: number, max_y: number) {
+    this.min_x = min_x;
+    this.min_y = min_y;
+    this.max_x = max_x;
+    this.max_y = max_y;
+  }
+
+  update(min_x: number, min_y: number, max_x: number, max_y: number) {
+    this.min_x = min_x;
+    this.min_y = min_y;
+    this.max_x = max_x;
+    this.max_y = max_y;
+  }
+
+  contains(x: number, y: number): boolean {
+    return (
+      x >= this.min_x &&
+      x <= this.max_x &&
+      y >= this.min_y &&
+      y <= this.max_y
+    );
+  }
 }
 
 let canvasX = 0;
@@ -24,52 +73,64 @@ function getMagnetDiv(magnet: Magnet): string {
 
 const webSocket = new WebSocket(WS_URL);
 
+// We receive an update to a magnet within our window
 webSocket.onmessage = (e) => {
   // TODO what if it's something else?
   const update = JSON.parse(e.data);
 
-  console.log("received update");
+  // Update for magnet within our window
+  if (viewWindow.contains(update.new_x, update.new_y)) {
+    if (viewWindow.contains(update.old_x, update.old_y)) {
+      // Magnet was already in our window, update it
+      const magnet = magnets.get(update.id)!;
+      magnet.x = update.new_x;
+      magnet.y = update.new_y;
+      magnet.rotation = update.rotation;
+      magnet.zIndex = ++globalzIndex;
+    } else {
+      // Magnet newly entered our window, add it
+      const magnet = new Magnet(
+        update.id,
+        update.new_x,
+        update.new_y,
+        update.rotation,
+        update.word,
+        ++globalzIndex,
+      );
 
-  // FIXME not considering old/new
+      magnets.set(
+        update.id,
+        magnet,
+      );
 
-  // TODO bleh
-  if (magnets.get(update.id)) {
-    const magnet = magnets.get(update.id)!;
-    magnets.set(update.id, {
-      id: update.id,
-      x: update.x,
-      y: update.y,
-      rotation: update.rotation,
-      word: magnet.word,
-      zIndex: ++globalzIndex,
-    });
+      const div = getMagnetDiv(magnet);
+      document.body.insertAdjacentHTML("beforeend", div);
+    }
 
     const element = document.getElementById(`${update.id}`) as HTMLElement;
-    element.style.setProperty("--local-x", `${update.x}px`);
-    element.style.setProperty("--local-y", `${update.y}px`);
+    element.style.setProperty("--local-x", `${update.new_x}px`);
+    element.style.setProperty("--local-y", `${update.new_y}px`);
     element.style.setProperty("--rotation", `${update.rotation}deg`);
+  } else {
+    // Magnet left our window, remove it
+    magnets.delete(update.id);
+    const element = document.getElementById(`${update.id}`) as HTMLElement;
+    document.body.removeChild(element);
   }
 };
 
+let viewWindow: Window;
+
+// TODO right now we're keeping all magnets in memory to have a stable zIndex
+// I think this can be removed once zIndex goes in the database
 const magnets = new Map<number, Magnet>();
 let globalzIndex = 0;
+
 async function replaceMagnets() {
-  const min_x = Math.floor(canvasX - globalThis.innerWidth);
-  const min_y = Math.floor(canvasY - globalThis.innerHeight);
-  const max_x = Math.floor(canvasX + 2 * globalThis.innerWidth);
-  const max_y = Math.floor(canvasY + 2 * globalThis.innerHeight);
-
-  const window = {
-    min_x,
-    min_y,
-    max_x,
-    max_y,
-  };
-
-  webSocket.send(JSON.stringify(window));
+  webSocket.send(JSON.stringify(viewWindow));
 
   const magnetArray = await fetch(
-    `${API_URL}/magnets?min_x=${window.min_x}&min_y=${window.min_y}&max_x=${window.max_x}&max_y=${window.max_y}`,
+    `${API_URL}/magnets?min_x=${viewWindow.min_x}&min_y=${viewWindow.min_y}&max_x=${viewWindow.max_x}&max_y=${viewWindow.max_y}`,
   ).then((r) => r.json());
 
   let divs = "";
@@ -125,17 +186,16 @@ async function replaceMagnets() {
       if (!isDragging) return;
       isDragging = false;
 
+      updateMagnet();
+
       const id = parseInt(element.id);
       const rotation = parseInt(element.style.getPropertyValue("--rotation"));
 
-      magnets.set(id, {
-        id,
-        x: newX,
-        y: newY,
-        rotation,
-        word: element.innerText,
-        zIndex: globalzIndex,
-      });
+      const magnet = magnets.get(id)!;
+      magnet.x = newX;
+      magnet.y = newY;
+      magnet.rotation = rotation;
+      magnet.zIndex = globalzIndex;
 
       await fetch(`${API_URL}/magnet`, {
         method: "PUT",
@@ -147,17 +207,34 @@ async function replaceMagnets() {
           else return value;
         }),
       });
+
+      clickOffsetX = 0;
+      clickOffsetY = 0;
+
+      originalX = 0;
+      originalY = 0;
+
+      newX = 0;
+      newY = 0;
     });
   });
 }
 
 webSocket.onopen = async () => {
-  console.log("websocket opened");
+  viewWindow = new Window(
+    Math.floor(canvasX - globalThis.innerWidth),
+    Math.floor(canvasY - globalThis.innerHeight),
+    Math.floor(canvasX + 2 * globalThis.innerWidth),
+    Math.floor(canvasY + 2 * globalThis.innerHeight),
+  );
+
   await replaceMagnets();
 
   let isDraggingWindow = false;
+
   let clickOffsetX = 0;
   let clickOffsetY = 0;
+
   let dragX = 0;
   let dragY = 0;
 
@@ -192,9 +269,24 @@ webSocket.onopen = async () => {
     if (!isDraggingWindow) return;
     isDraggingWindow = false;
 
+    updateWindow();
+
     canvasX = dragX;
     canvasY = dragY;
 
+    viewWindow.update(
+      Math.floor(canvasX - globalThis.innerWidth),
+      Math.floor(canvasY - globalThis.innerHeight),
+      Math.floor(canvasX + 2 * globalThis.innerWidth),
+      Math.floor(canvasY + 2 * globalThis.innerHeight),
+    );
+
     await replaceMagnets();
+
+    clickOffsetX = 0;
+    clickOffsetY = 0;
+
+    dragX = 0;
+    dragY = 0;
   });
 };
