@@ -15,7 +15,7 @@ use mimalloc::MiMalloc;
 use secrecy::ExposeSecret as _;
 use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
 use sqlx::postgres::PgListener;
-use tokio::{net::TcpListener, select};
+use tokio::{net::TcpListener, select, sync::broadcast};
 use tokio_util::sync::CancellationToken;
 use tower::ServiceBuilder;
 use tower_http::{
@@ -89,11 +89,14 @@ async fn broadcast_changes(
                         let magnet_update = serde_json::from_str(&msg.payload()).expect("Received invalid JSON from postgres");
                         if tx.len() >= 10 {
                             tracing::error!(
-                                "Potentially dropping queued random numbers. Consider increasing \
-                                the capacity of the broadcast channel."
+                                "Potentially dropping queued magnet updates.\
+                                Consider increasing the capacity of the broadcast channel."
                             );
                         }
-                        tx.send(magnet_update).expect("All receivers unexpectedly dropped");
+
+                        if tx.send(magnet_update).is_err() {
+                            tracing::warn!("Tried broadcasting magnet update but no receivers present.");
+                        }
                     }
                     Err(e) => {
                         tracing::error!("Error from listener: {}", e);
@@ -114,7 +117,7 @@ async fn run(config: Config) -> Result<()> {
     let mut pg_change_listener = PgListener::connect_with(&pool).await?;
     pg_change_listener.listen("magnet_updates").await?;
 
-    let (tx, _rx) = tokio::sync::broadcast::channel(config.broadcast_capacity);
+    let tx = broadcast::Sender::new(config.broadcast_capacity);
 
     let broadcast_changes_task = tokio::task::spawn(broadcast_changes(
         tx.clone(),
