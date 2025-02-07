@@ -36,23 +36,12 @@ async fn ws_handler(
     })
 }
 
-async fn heartbeat(socket: &mut WebSocket) -> bool {
-    socket
-        .send(Message::Ping(Bytes::from_static(b"heartbeat")))
-        .await
-        .is_ok()
-}
-
 #[tracing::instrument]
 async fn handle_socket(
     mut socket: WebSocket,
     who: SocketAddr,
     state: AppState,
 ) -> Result<(), FridgeError> {
-    if !heartbeat(&mut socket).await {
-        return Err(anyhow::anyhow!("Failed to ping new connection").into());
-    }
-
     let mut rx = state.magnet_updates.subscribe();
     let mut client_window = Window::default();
 
@@ -80,7 +69,7 @@ async fn handle_socket(
                         }
                     }
                     Some(Ok(Message::Close(close))) => {
-                        tracing::debug!("Socket closed by client: {close:?}");
+                        tracing::debug!("WebSocket closed by client: {close:?}");
                         break;
                     }
                     thing => {
