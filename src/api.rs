@@ -17,6 +17,7 @@ struct Magnet {
     x: i32,
     y: i32,
     rotation: i32,
+    z_index: i64,
     word: Option<String>,
 }
 
@@ -27,9 +28,9 @@ async fn magnets(
 ) -> Result<impl IntoResponse, FridgeError> {
     let magnets: Vec<Magnet> = sqlx::query_as!(
         Magnet,
-        r#"SELECT id, coords[0]::int AS "x!", coords[1]::int AS "y!", rotation, word
+        r#"SELECT id, coords[0]::int AS "x!", coords[1]::int AS "y!", rotation, word, z_index
            FROM magnets
-           WHERE coords <@ box(point($1::int, $2::int), point($3::int, $4::int))"#,
+           WHERE coords <@ Box(Point($1::int, $2::int), Point($3::int, $4::int))"#,
         window.min_x,
         window.min_y,
         window.max_x,
@@ -53,20 +54,21 @@ async fn update_magnet(
         .and_then(|s| s.parse().ok())
         .context("Invalid x-request-id header")?;
 
-    sqlx::query!(
+    let z_index = sqlx::query_scalar!(
         r#"UPDATE magnets
-           SET coords = point($1::int, $2::int), rotation = $3, last_modifier = $4
-           WHERE id = $5"#,
+           SET coords = Point($1::int, $2::int), rotation = $3, last_modifier = $4, z_index = nextval('magnets_z_index_seq')
+           WHERE id = $5
+           RETURNING z_index"#,
         magnet.x,
         magnet.y,
         magnet.rotation,
         request_id,
         magnet.id
     )
-    .execute(&state.postgres)
+    .fetch_one(&state.postgres)
     .await?;
 
-    Ok(StatusCode::OK)
+    Ok((StatusCode::OK, z_index.to_string()))
 }
 
 #[tracing::instrument]
