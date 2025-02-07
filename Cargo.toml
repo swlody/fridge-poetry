@@ -3,11 +3,17 @@ name = "fridge-poetry"
 version = "0.1.0"
 edition = "2021"
 
+[profile.release]
+lto = true
+codegen-units = 1
+
 [dependencies]
 anyhow = "1.0.89"
 axum = { version = "0.8.1", features = ["macros", "ws"] }
 futures-util = "0.3.30"
+mimalloc = "0.1.43"
 rubenvy = "0.1.1"
+# Override native-tls with rustls, keep other default features
 sentry = { version = "0.36.0", default-features = false, features = [
     "anyhow",
     "backtrace",
@@ -31,7 +37,14 @@ sqlx = { version = "0.8.3", features = [
 thiserror = "2.0.11"
 tokio = { version = "1.40.0", features = ["full", "time"] }
 tower = "0.5.1"
-tower-http = { version = "0.6.1", features = ["cors", "fs", "limit", "request-id", "timeout", "trace", "util"] }
+tower-http = { version = "0.6.1", features = [
+    "cors",
+    "limit",
+    "request-id",
+    "timeout",
+    "trace",
+    "util",
+] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 secrecy = "0.10.3"
