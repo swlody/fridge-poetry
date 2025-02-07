@@ -3,8 +3,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MagnetUpdate {
     pub id: i32,
-    pub x: i32,
-    pub y: i32,
+    pub old_x: i32,
+    pub old_y: i32,
+    pub new_x: i32,
+    pub new_y: i32,
     pub rotation: f32,
 }
 

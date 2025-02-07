@@ -40,8 +40,10 @@ CREATE OR REPLACE FUNCTION notify_change() RETURNS TRIGGER AS $$
   BEGIN
     payload := json_build_object(
       'id', NEW.id,
-      'x', ST_X(NEW.coords)::INTEGER,
-      'y', ST_Y(NEW.coords)::INTEGER,
+      'old_x', ST_X (OLD.coords)::INTEGER,
+      'old_y', ST_Y (OLD.coords)::INTEGER,
+      'new_x', ST_X(NEW.coords)::INTEGER,
+      'new_y', ST_Y(NEW.coords)::INTEGER,
       'rotation', NEW.rotation
     );
     PERFORM pg_notify('magnet_updates', payload);
