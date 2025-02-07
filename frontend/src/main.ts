@@ -154,9 +154,14 @@ async function replaceMagnets() {
 
     let isDragging = false;
 
+    function updateMagnet() {
+      element.style.setProperty("--local-x", `${newX}px`);
+      element.style.setProperty("--local-y", `${newY}px`);
+    }
+
     element.addEventListener("pointerdown", (e) => {
       e.stopPropagation();
-
+      element.setPointerCapture(e.pointerId);
       isDragging = true;
 
       clickOffsetX = Math.floor(e.clientX - element.offsetLeft);
@@ -166,12 +171,7 @@ async function replaceMagnets() {
       originalY = parseInt(element.style.getPropertyValue("--local-y"));
 
       element.style.zIndex = String(++globalzIndex);
-    });
-
-    function updateMagnet() {
-      element.style.setProperty("--local-x", `${newX}px`);
-      element.style.setProperty("--local-y", `${newY}px`);
-    }
+    }, { passive: true });
 
     document.addEventListener("pointermove", (e) => {
       if (!isDragging) return;
@@ -180,10 +180,11 @@ async function replaceMagnets() {
       newY = Math.floor(originalY + e.clientY - clickOffsetY);
 
       requestAnimationFrame(updateMagnet);
-    });
+    }, { passive: true });
 
-    element.addEventListener("pointerup", async () => {
+    element.addEventListener("pointerup", async (e) => {
       if (!isDragging) return;
+      element.releasePointerCapture(e.pointerId);
       isDragging = false;
 
       updateMagnet();
@@ -217,7 +218,7 @@ async function replaceMagnets() {
       newX = 0;
       newY = 0;
     });
-  });
+  }, { passive: true });
 }
 
 webSocket.onopen = async () => {
@@ -250,11 +251,12 @@ webSocket.onopen = async () => {
   }
 
   document.body.addEventListener("pointerdown", (e) => {
+    document.body.setPointerCapture(e.pointerId);
     isDraggingWindow = true;
 
     clickOffsetX = Math.floor(canvasX + e.clientX);
     clickOffsetY = Math.floor(canvasY + e.clientY);
-  });
+  }, { passive: true });
 
   document.body.addEventListener("pointermove", (e) => {
     if (!isDraggingWindow) return;
@@ -263,10 +265,11 @@ webSocket.onopen = async () => {
     dragY = Math.floor(clickOffsetY - e.clientY);
 
     requestAnimationFrame(updateWindow);
-  });
+  }, { passive: true });
 
-  document.body.addEventListener("pointerup", async () => {
+  document.body.addEventListener("pointerup", async (e) => {
     if (!isDraggingWindow) return;
+    document.body.releasePointerCapture(e.pointerId);
     isDraggingWindow = false;
 
     updateWindow();
@@ -288,5 +291,5 @@ webSocket.onopen = async () => {
 
     dragX = 0;
     dragY = 0;
-  });
+  }, { passive: true });
 };
