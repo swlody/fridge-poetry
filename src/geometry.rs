@@ -13,6 +13,7 @@ impl Point {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct Window {
     pub min_x: i32,
     pub min_y: i32,

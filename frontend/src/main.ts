@@ -31,24 +31,24 @@ class Magnet {
 // Window that represents the total area of magnets in the DOM
 // This is a 3x3 grid of [viewport area] centered at the actual viewport
 class Window {
-  min_x: number;
-  min_y: number;
-  max_x: number;
-  max_y: number;
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
 
-  constructor(min_x: number, min_y: number, max_x: number, max_y: number) {
-    this.min_x = min_x;
-    this.min_y = min_y;
-    this.max_x = max_x;
-    this.max_y = max_y;
+  constructor(minX: number, minY: number, maxX: number, maxY: number) {
+    this.minX = minX;
+    this.minY = minY;
+    this.maxX = maxX;
+    this.maxY = maxY;
   }
 
   contains(x: number, y: number): boolean {
     return (
-      x >= this.min_x &&
-      x <= this.max_x &&
-      y >= this.min_y &&
-      y <= this.max_y
+      x >= this.minX &&
+      x <= this.maxX &&
+      y >= this.minY &&
+      y <= this.maxY
     );
   }
 }
@@ -65,6 +65,7 @@ function getMagnetDiv(magnet: Magnet): string {
 
 const webSocket = new WebSocket(WS_URL);
 
+// TODO consider race conditions between this and mouseup replaceMagnets
 // We receive an update to a magnet within our window
 webSocket.onmessage = (e) => {
   // TODO what if it's something else?
@@ -72,15 +73,10 @@ webSocket.onmessage = (e) => {
 
   // Update for magnet within our window
   if (viewWindow.contains(update.new_x, update.new_y)) {
-    if (viewWindow.contains(update.old_x, update.old_y)) {
-      // Magnet was already in our window, update it
-      const magnet = magnets.get(update.id)!;
-      magnet.x = update.new_x;
-      magnet.y = update.new_y;
-      magnet.rotation = update.rotation;
-      magnet.zIndex = update.z_index;
-    } else {
+    if (!viewWindow.contains(update.old_x, update.old_y)) {
       // Magnet newly entered our window, add it
+      // TODO use same type for magnet and magnet update?
+      // TODO or, magnet update is a magnet + old_x and old_y?
       const magnet = new Magnet(
         update.id,
         update.new_x,
@@ -90,51 +86,56 @@ webSocket.onmessage = (e) => {
         update.z_index,
       );
 
-      magnets.set(
-        update.id,
-        magnet,
-      );
-
-      const div = getMagnetDiv(magnet);
-      document.body.insertAdjacentHTML("beforeend", div);
+      document.body.insertAdjacentHTML("beforeend", getMagnetDiv(magnet));
     }
 
-    const element = document.getElementById(`${update.id}`) as HTMLElement;
+    const element = document.getElementById(`${update.id}`)!;
     element.style.setProperty("--local-x", `${update.new_x}px`);
     element.style.setProperty("--local-y", `${update.new_y}px`);
     element.style.setProperty("--rotation", `${update.rotation}deg`);
     element.style.zIndex = update.z_index;
   } else {
     // Magnet left our window, remove it
-    magnets.delete(update.id);
-    const element = document.getElementById(`${update.id}`) as HTMLElement;
+    const element = document.getElementById(`${update.id}`)!;
     document.body.removeChild(element);
   }
 };
 
 let viewWindow: Window;
 
-// TODO right now we're keeping all magnets in memory to have a stable zIndex
-// I think this can be removed once zIndex goes in the database
-const magnets = new Map<number, Magnet>();
-
 async function replaceMagnets() {
   webSocket.send(JSON.stringify(viewWindow));
 
   const magnetArray = await fetch(
-    `${API_URL}/magnets?min_x=${viewWindow.min_x}&min_y=${viewWindow.min_y}&max_x=${viewWindow.max_x}&max_y=${viewWindow.max_y}`,
+    `${API_URL}/magnets?minX=${viewWindow.minX}&minY=${viewWindow.minY}&maxX=${viewWindow.maxX}&maxY=${viewWindow.maxY}`,
   ).then((r) => r.json());
 
-  let divs = "";
+  const missingMagnetIds = new Set();
+  document.body.querySelectorAll(".magnet").forEach((element) => {
+    missingMagnetIds.add(element.id);
+  });
+
+  const newElements = [];
   for (const magnet of magnetArray) {
-    magnets.set(magnet.id, magnet);
-    divs += getMagnetDiv(magnet);
+    const element = document.getElementById(`${magnet.id}`);
+    if (element) {
+      missingMagnetIds.delete(String(magnet.id));
+
+      element.style.setProperty("--local-x", `${magnet.x}px`);
+      element.style.setProperty("--local-y", `${magnet.y}px`);
+      element.style.setProperty("--rotation", `${magnet.rotation}deg`);
+      element.style.zIndex = magnet.z_index;
+    } else {
+      document.body.insertAdjacentHTML("afterbegin", getMagnetDiv(magnet));
+      newElements.push(document.body.firstElementChild as HTMLElement);
+    }
   }
-  document.body.innerHTML = divs;
 
-  document.querySelectorAll(".magnet").forEach((magnet) => {
-    const element = magnet as HTMLElement;
+  for (const id of missingMagnetIds) {
+    document.body.removeChild(document.getElementById(`${id}`)!);
+  }
 
+  newElements.forEach((element) => {
     let clickOffsetX: number;
     let clickOffsetY: number;
 
@@ -185,23 +186,24 @@ async function replaceMagnets() {
       const id = parseInt(element.id);
       const rotation = parseInt(element.style.getPropertyValue("--rotation"));
 
-      const magnet = magnets.get(id)!;
-      magnet.x = newX;
-      magnet.y = newY;
-      magnet.rotation = rotation;
+      const update = {
+        id: id,
+        x: newX,
+        y: newY,
+        rotation: rotation,
+      };
 
       const newZIndex = await fetch(`${API_URL}/magnet`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(magnets.get(id), (key, value) => {
+        body: JSON.stringify(update, (key, value) => {
           if (key == "word" || key == "zIndex") return undefined;
           else return value;
         }),
       }).then((r) => r.text());
 
-      magnet.zIndex = parseInt(newZIndex);
       element.style.zIndex = newZIndex;
 
       clickOffsetX = 0;
@@ -225,6 +227,7 @@ webSocket.onopen = async () => {
   );
 
   await replaceMagnets();
+  document.body.removeChild(document.getElementById("loader")!);
 
   let isDraggingWindow = false;
 
@@ -267,16 +270,15 @@ webSocket.onopen = async () => {
     document.body.releasePointerCapture(e.pointerId);
     isDraggingWindow = false;
 
-    updateWindow();
-
     canvasX = dragX;
     canvasY = dragY;
 
-    viewWindow.min_x = Math.floor(canvasX - globalThis.innerWidth);
-    viewWindow.min_y = Math.floor(canvasY - globalThis.innerHeight);
-    viewWindow.max_x = Math.floor(canvasX + 2 * globalThis.innerWidth);
-    viewWindow.max_y = Math.floor(canvasY + 2 * globalThis.innerHeight);
+    viewWindow.minX = Math.floor(canvasX - globalThis.innerWidth);
+    viewWindow.minY = Math.floor(canvasY - globalThis.innerHeight);
+    viewWindow.maxX = Math.floor(canvasX + 2 * globalThis.innerWidth);
+    viewWindow.maxY = Math.floor(canvasY + 2 * globalThis.innerHeight);
 
+    updateWindow();
     await replaceMagnets();
 
     clickOffsetX = 0;

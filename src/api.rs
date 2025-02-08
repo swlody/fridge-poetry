@@ -12,12 +12,13 @@ use uuid::Uuid;
 use crate::{error::FridgeError, geometry::Window, state::AppState};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct Magnet {
     id: i32,
     x: i32,
     y: i32,
     rotation: i32,
-    z_index: i64,
+    z_index: Option<i64>,
     word: Option<String>,
 }
 
