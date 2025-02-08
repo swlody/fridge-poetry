@@ -166,6 +166,7 @@ async fn run(config: Config) -> Result<()> {
     )
     .await?;
 
+    // TODO I don't think below fires without a ctrl_c handler
     token.cancel();
     broadcast_changes_task.await?;
 
