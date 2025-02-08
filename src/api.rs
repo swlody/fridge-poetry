@@ -55,6 +55,8 @@ async fn update_magnet(
         .and_then(|s| s.parse().ok())
         .context("Invalid x-request-id header")?;
 
+    // TODO coherence checks: inside area bounds and rotation within correct range
+    // TODO technically unnecessary to return zIndex cause user will get ws update
     let z_index = sqlx::query_scalar!(
         r#"UPDATE magnets
            SET coords = Point($1::int, $2::int), rotation = $3, last_modifier = $4, z_index = nextval('magnets_z_index_seq')
