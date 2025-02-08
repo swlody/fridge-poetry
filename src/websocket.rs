@@ -9,11 +9,9 @@ use axum::{
     routing::get,
     Router,
 };
-use futures_util::FutureExt;
 use tokio::select;
 
 use crate::{
-    error::FridgeError,
     geometry::{Point, Window},
     state::AppState,
 };
@@ -24,21 +22,11 @@ async fn ws_handler(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| {
-        handle_socket(socket, addr, state).map(|res| {
-            if let Err(e) = res {
-                tracing::error!("Error in websocket: {:?}", e);
-            }
-        })
-    })
+    ws.on_upgrade(move |socket| handle_socket(socket, addr, state))
 }
 
 #[tracing::instrument]
-async fn handle_socket(
-    mut socket: WebSocket,
-    who: SocketAddr,
-    state: AppState,
-) -> Result<(), FridgeError> {
+async fn handle_socket(mut socket: WebSocket, who: SocketAddr, state: AppState) {
     let mut rx = state.magnet_updates.subscribe();
     let mut client_window = Window::default();
 
@@ -71,6 +59,7 @@ async fn handle_socket(
                         break;
                     }
                     Some(thing) => {
+                        // TODO just disconnect if we receive invalid data?
                         tracing::debug!("Received unexpected message over websocket: {thing:?}")
                     }
                     None => {
@@ -81,8 +70,6 @@ async fn handle_socket(
             }
         }
     }
-
-    Ok(())
 }
 
 pub fn routes() -> Router<AppState> {

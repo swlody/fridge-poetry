@@ -26,6 +26,7 @@ FROM words_array
 CROSS JOIN generate_series(1, 2000000);
 
 -- TODO separate migration?
+-- TODO test queries with bitmap scan disabled?
 CREATE INDEX idx_magnets_coords ON magnets USING gist(coords);
 -- TODO understand this better. Does it need to be done regularly as maintenance?
 -- If so, how?
