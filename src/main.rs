@@ -18,7 +18,7 @@ use secrecy::{ExposeSecret as _, SecretString};
 use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
 use serde::Deserialize;
 use sqlx::postgres::PgListener;
-use tokio::{net::TcpListener, select, sync::broadcast};
+use tokio::{net::TcpListener, select, signal, sync::broadcast};
 use tokio_util::sync::CancellationToken;
 use tower::ServiceBuilder;
 use tower_http::{
@@ -108,7 +108,6 @@ async fn broadcast_changes(
     loop {
         select! {
             _ = token.cancelled() => {
-                tracing::info!("Exiting change broadcast task due to token cancellation");
                 break;
             },
             res = pg_change_listener.recv() => {
@@ -197,11 +196,35 @@ async fn run(config: Config) -> Result<()> {
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
+    .with_graceful_shutdown(shutdown_signal())
     .await?;
 
-    // TODO I don't think below fires without a ctrl_c handler
     token.cancel();
     broadcast_changes_task.await?;
 
     Ok(())
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
 }
