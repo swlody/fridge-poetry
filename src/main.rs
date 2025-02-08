@@ -1,34 +1,36 @@
 mod api;
-mod config;
 mod error;
 mod geometry;
 mod middleware;
 mod state;
 mod websocket;
 
-use std::net::SocketAddr;
+use std::{net::SocketAddr, str::FromStr as _};
 
 use anyhow::Result;
-use axum::{http::Method, Router};
+use axum::{
+    http::{HeaderValue, Method},
+    Router,
+};
 use error::FridgeError;
 use mimalloc::MiMalloc;
-use secrecy::ExposeSecret as _;
+use secrecy::{ExposeSecret as _, SecretString};
 use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
+use serde::Deserialize;
 use sqlx::postgres::PgListener;
 use tokio::{net::TcpListener, select, sync::broadcast};
 use tokio_util::sync::CancellationToken;
 use tower::ServiceBuilder;
 use tower_http::{
-    cors::{Any, CorsLayer},
+    cors::{AllowOrigin, Any, CorsLayer},
     limit::RequestBodyLimitLayer,
-    timeout::TimeoutLayer,
     trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer},
     ServiceBuilderExt as _,
 };
+use tracing::Level;
 use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
 
 use crate::{
-    config::Config,
     middleware::{MakeRequestUuidV7, SentryReportRequestInfoLayer},
     state::{AppState, MagnetUpdate},
 };
@@ -36,14 +38,40 @@ use crate::{
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
+#[derive(Deserialize, Debug)]
+pub struct Config {
+    #[serde(rename = "fridge_log_level")]
+    pub log_level: Option<String>,
+    #[serde(rename = "fridge_trace_sample_rate")]
+    pub trace_sample_rate: Option<f32>,
+    #[serde(rename = "fridge_error_sample_rate")]
+    pub error_sample_rate: Option<f32>,
+    #[serde(rename = "fridge_broadcast_capacity")]
+    pub broadcast_capacity: Option<usize>,
+    #[serde(rename = "fridge_cors_origin")]
+    pub cors_origin: Option<String>,
+
+    pub sentry_dsn: Option<SecretString>,
+    pub database_url: SecretString,
+}
+
 fn main() -> Result<()> {
     rubenvy::rubenvy_auto()?;
 
-    let config = Config::from_environment();
+    let config: Config = envy::from_env()?;
 
     tracing_subscriber::fmt()
         .with_target(true)
-        .with_max_level(config.log_level)
+        .with_max_level(
+            config
+                .log_level
+                .as_ref()
+                .map(|s| {
+                    Level::from_str(&s)
+                        .unwrap_or_else(|_| panic!("Invalid value for FRIDGE_LOG_LEVEL: {s}"))
+                })
+                .unwrap_or(Level::DEBUG),
+        )
         .pretty()
         .finish()
         .with(sentry::integrations::tracing::layer())
@@ -55,8 +83,8 @@ fn main() -> Result<()> {
             dsn.expose_secret(),
             sentry::ClientOptions {
                 release: sentry::release_name!(),
-                sample_rate: config.error_sample_rate,
-                traces_sample_rate: config.trace_sample_rate,
+                sample_rate: config.error_sample_rate.unwrap_or(1.0),
+                traces_sample_rate: config.trace_sample_rate.unwrap_or(0.1),
                 attach_stacktrace: true,
                 ..Default::default()
             },
@@ -110,14 +138,14 @@ async fn broadcast_changes(
 async fn run(config: Config) -> Result<()> {
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(5)
-        .connect(config.postgres_url.expose_secret())
+        .connect(config.database_url.expose_secret())
         .await?;
 
     let token: CancellationToken = CancellationToken::new();
     let mut pg_change_listener = PgListener::connect_with(&pool).await?;
     pg_change_listener.listen("magnet_updates").await?;
 
-    let tx = broadcast::Sender::new(config.broadcast_capacity);
+    let tx = broadcast::Sender::new(config.broadcast_capacity.unwrap_or(10));
 
     let broadcast_changes_task = tokio::task::spawn(broadcast_changes(
         tx.clone(),
@@ -138,11 +166,16 @@ async fn run(config: Config) -> Result<()> {
         )
         .propagate_x_request_id()
         .layer(RequestBodyLimitLayer::new(1024))
-        .layer(TimeoutLayer::new(config.request_timeout))
         .layer(
             CorsLayer::new()
                 .allow_methods([Method::GET, Method::PUT, Method::OPTIONS])
-                .allow_origin(config.cors_origin)
+                .allow_origin(
+                    config
+                        .cors_origin
+                        .and_then(|s| HeaderValue::from_str(s.as_str()).ok())
+                        .map(AllowOrigin::from)
+                        .unwrap_or(AllowOrigin::any()),
+                )
                 .allow_headers(Any),
         );
 
