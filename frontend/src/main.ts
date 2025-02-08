@@ -53,13 +53,7 @@ class Window {
   }
 }
 
-let canvasX = 0;
-let canvasY = 0;
-
 let door: HTMLElement;
-document.onreadystatechange = () => {
-  door = document.getElementById("door")!;
-};
 
 function createMagnet(magnet: Magnet): HTMLElement {
   const element = document.createElement("div");
@@ -80,34 +74,31 @@ const webSocket = new WebSocket(WS_URL);
 webSocket.onmessage = (e) => {
   // TODO what if it's something else?
   const update = JSON.parse(e.data);
+  const element = document.getElementById(`${update.id}`);
 
-  // Update for magnet within our window
-  if (viewWindow.contains(update.new_x, update.new_y)) {
-    if (!viewWindow.contains(update.old_x, update.old_y)) {
-      // Magnet newly entered our window, add it
-      // TODO use same type for magnet and magnet update?
-      // TODO or, magnet update is a magnet + old_x and old_y?
-      const magnet = new Magnet(
-        update.id,
-        update.new_x,
-        update.new_y,
-        update.rotation,
-        update.word,
-        update.z_index,
-      );
-
-      door.append(createMagnet(magnet));
-    } else {
-      const element = document.getElementById(`${update.id}`)!;
-      element.style.setProperty("--local-x", `${update.new_x}px`);
-      element.style.setProperty("--local-y", `${update.new_y}px`);
-      element.style.setProperty("--rotation", `${update.rotation}deg`);
-      element.style.zIndex = update.z_index;
-    }
-  } else {
+  // Received update for magnet within our window
+  if (element && viewWindow.contains(update.new_x, update.new_y)) {
+    // Object is moving within bounds, update its values
+    element.style.setProperty("--local-x", `${update.new_x}px`);
+    element.style.setProperty("--local-y", `${update.new_y}px`);
+    element.style.setProperty("--rotation", `${update.rotation}deg`);
+    element.style.zIndex = update.z_index;
+  } else if (element) {
     // Magnet left our window, remove it
-    const element = document.getElementById(`${update.id}`)!;
     door.removeChild(element);
+  } else {
+    // New object arriving from out of bounds, create it
+    // Since we received the update, it must be for a removal
+    // TODO for removals we can just send a remove message from backend with ID, no need for old_x, old_y
+    const magnet = new Magnet(
+      update.id,
+      update.new_x,
+      update.new_y,
+      update.rotation,
+      update.word,
+      update.z_index,
+    );
+    door.append(createMagnet(magnet));
   }
 };
 
@@ -146,14 +137,25 @@ async function replaceMagnets() {
 
   newElements.querySelectorAll(".magnet").forEach((magnet) => {
     const element = magnet as HTMLElement;
-    let clickOffsetX: number;
-    let clickOffsetY: number;
+    let clickOffsetX = 0;
+    let clickOffsetY = 0;
 
-    let originalX: number;
-    let originalY: number;
+    let originalX = 0;
+    let originalY = 0;
 
-    let newX: number;
-    let newY: number;
+    let newX = 0;
+    let newY = 0;
+
+    function resetPointerState() {
+      clickOffsetX = 0;
+      clickOffsetY = 0;
+
+      originalX = 0;
+      originalY = 0;
+
+      newX = 0;
+      newY = 0;
+    }
 
     let isDragging = false;
 
@@ -216,14 +218,7 @@ async function replaceMagnets() {
 
       element.style.zIndex = newZIndex;
 
-      clickOffsetX = 0;
-      clickOffsetY = 0;
-
-      originalX = 0;
-      originalY = 0;
-
-      newX = 0;
-      newY = 0;
+      resetPointerState();
     });
   }, { passive: true });
 
@@ -231,32 +226,59 @@ async function replaceMagnets() {
 }
 
 webSocket.onopen = async () => {
-  viewWindow = new Window(
-    Math.floor(canvasX - globalThis.innerWidth),
-    Math.floor(canvasY - globalThis.innerHeight),
-    Math.floor(canvasX + 2 * globalThis.innerWidth),
-    Math.floor(canvasY + 2 * globalThis.innerHeight),
-  );
+  door = document.getElementById("door")!;
 
-  await replaceMagnets();
-  door.removeChild(document.getElementById("loader")!);
+  let canvasX: number;
+  let canvasY: number;
 
   let isDraggingWindow = false;
 
   let clickOffsetX = 0;
   let clickOffsetY = 0;
 
-  let dragX = 0;
-  let dragY = 0;
+  function updateCoordinates(centerX: number, centerY: number) {
+    canvasX = Math.floor(centerX - globalThis.innerWidth / 2);
+    canvasY = Math.floor(-centerY - globalThis.innerHeight / 2);
+
+    document.documentElement.style.setProperty("--canvas-x", `${canvasX}px`);
+    document.documentElement.style.setProperty("--canvas-y", `${canvasY}px`);
+
+    viewWindow = new Window(
+      Math.floor(canvasX - globalThis.innerWidth),
+      Math.floor(canvasY - globalThis.innerHeight),
+      Math.floor(canvasX + 2 * globalThis.innerWidth),
+      Math.floor(canvasY + 2 * globalThis.innerHeight),
+    );
+  }
+
+  let disableNextHashCallback = false;
+  function updateCoordinatesFromHash() {
+    if (disableNextHashCallback) {
+      disableNextHashCallback = false;
+      return;
+    }
+
+    const params = new URLSearchParams(globalThis.location.hash.slice(1));
+    const centerX = parseInt(params.get("x") ?? "0");
+    const centerY = parseInt(params.get("y") ?? "0");
+
+    updateCoordinates(centerX, centerY);
+  }
+
+  globalThis.addEventListener("hashchange", updateCoordinatesFromHash);
+
+  updateCoordinatesFromHash();
+  await replaceMagnets();
+  door.removeChild(document.getElementById("loader")!);
 
   function updateWindow() {
     document.documentElement.style.setProperty(
       "--canvas-x",
-      `${dragX}px`,
+      `${canvasX}px`,
     );
     document.documentElement.style.setProperty(
       "--canvas-y",
-      `${dragY}px`,
+      `${canvasY}px`,
     );
   }
 
@@ -271,8 +293,8 @@ webSocket.onopen = async () => {
   document.addEventListener("pointermove", (e) => {
     if (!isDraggingWindow) return;
 
-    dragX = Math.floor(clickOffsetX - e.clientX);
-    dragY = Math.floor(clickOffsetY - e.clientY);
+    canvasX = Math.floor(clickOffsetX - e.clientX);
+    canvasY = Math.floor(clickOffsetY - e.clientY);
 
     requestAnimationFrame(updateWindow);
   }, { passive: true });
@@ -282,21 +304,16 @@ webSocket.onopen = async () => {
     door.releasePointerCapture(e.pointerId);
     isDraggingWindow = false;
 
-    canvasX = dragX;
-    canvasY = dragY;
+    const centerX = Math.floor(canvasX + globalThis.innerWidth / 2);
+    const centerY = -1 * Math.floor(canvasY + globalThis.innerHeight / 2);
+    disableNextHashCallback = true;
+    globalThis.location.hash = `x=${centerX}&y=${centerY}`;
 
-    viewWindow.minX = Math.floor(canvasX - globalThis.innerWidth);
-    viewWindow.minY = Math.floor(canvasY - globalThis.innerHeight);
-    viewWindow.maxX = Math.floor(canvasX + 2 * globalThis.innerWidth);
-    viewWindow.maxY = Math.floor(canvasY + 2 * globalThis.innerHeight);
+    updateCoordinates(centerX, centerY);
 
-    updateWindow();
     await replaceMagnets();
 
     clickOffsetX = 0;
     clickOffsetY = 0;
-
-    dragX = 0;
-    dragY = 0;
   }, { passive: true });
 };
