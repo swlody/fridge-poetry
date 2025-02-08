@@ -1,3 +1,8 @@
+:root {
+  --canvas-x: 0px;
+  --canvas-y: 0px;
+}
+
 .magnet {
   transform: translate3d(
       calc(var(--local-x) - var(--canvas-x)),
@@ -17,8 +22,6 @@
 }
 
 body {
-  --canvas-x: 0px;
-  --canvas-y: 0px;
   width: 100vw;
   height: 100vh;
   margin: 0;
