@@ -26,7 +26,7 @@ body {
   height: 100vh;
   margin: 0;
   overflow: hidden;
-  background-image: url("static/background.png");
+  background-image: url("/static/background.png");
   background-position: calc(0px - var(--canvas-x)) calc(0px - var(--canvas-y));
   background-size: 900px 600px;
   background-repeat: repeat;
