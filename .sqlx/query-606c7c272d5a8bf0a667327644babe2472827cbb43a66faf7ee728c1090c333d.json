@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE magnets\n           SET coords = Point($1::int, $2::int), rotation = $3, z_index = nextval('magnets_z_index_seq')\n           WHERE id = $4",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "606c7c272d5a8bf0a667327644babe2472827cbb43a66faf7ee728c1090c333d"
+}

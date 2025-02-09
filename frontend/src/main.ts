@@ -2,7 +2,6 @@ import { pack, unpack } from "msgpackr";
 
 import "./style.css";
 
-const API_URL = import.meta.env.VITE_API_BASE_URL || "api";
 const WS_URL = import.meta.env.VITE_WS_BASE_URL || "ws";
 
 class Magnet {
@@ -69,6 +68,14 @@ function createMagnet(magnet: Magnet): HTMLElement {
   return element;
 }
 
+function getMagnetsFromArray(array) {
+  const magnets: Magnet[] = [];
+  for (const val of array) {
+    magnets.push(new Magnet(val[0], val[1], val[2], val[3], val[4], val[5]));
+  }
+  return magnets;
+}
+
 const webSocket = new WebSocket(WS_URL);
 
 // TODO consider race conditions between this and mouseup replaceMagnets
@@ -79,7 +86,10 @@ webSocket.onmessage = async (e) => {
 
   const update = unpack(uint8Array);
 
-  if (update.Move) {
+  if (update instanceof Array) {
+    const magnets = getMagnetsFromArray(update);
+    replaceMagnets(magnets);
+  } else if (update.Move) {
     // Received update for magnet within our window
     const move = update.Move;
     const element = document.getElementById(`${move[0]}`)!;
@@ -112,13 +122,7 @@ webSocket.onmessage = async (e) => {
 
 let viewWindow: Window;
 
-async function replaceMagnets() {
-  webSocket.send(pack(viewWindow));
-
-  const magnetArray = await fetch(
-    `${API_URL}/magnets?x1=${viewWindow.x1}&y1=${viewWindow.y1}&x2=${viewWindow.x2}&y2=${viewWindow.y2}`,
-  ).then((r) => r.json());
-
+function replaceMagnets(magnetArray: Magnet[]) {
   const missingMagnetIds = new Set();
   door.querySelectorAll(".magnet").forEach((element) => {
     missingMagnetIds.add(element.id);
@@ -133,7 +137,7 @@ async function replaceMagnets() {
       element.style.setProperty("--local-x", `${magnet.x}px`);
       element.style.setProperty("--local-y", `${magnet.y}px`);
       element.style.setProperty("--rotation", `${magnet.rotation}deg`);
-      element.style.zIndex = magnet.z_index;
+      element.style.zIndex = magnet.zIndex.toString();
     } else {
       newElements.append(createMagnet(magnet));
     }
@@ -186,7 +190,7 @@ async function replaceMagnets() {
       requestAnimationFrame(updateMagnet);
     }, { passive: true });
 
-    element.addEventListener("pointerup", async (e) => {
+    element.addEventListener("pointerup", (e) => {
       if (!isDragging) return;
       e.stopPropagation();
       element.releasePointerCapture(e.pointerId);
@@ -196,28 +200,13 @@ async function replaceMagnets() {
 
       updateMagnet();
 
-      const id = parseInt(element.id);
-      const rotation = parseInt(element.style.getPropertyValue("--rotation"));
-
-      const update = {
-        id: id,
+      const magnetUpdate = pack({
+        id: parseInt(element.id),
         x: newX,
         y: newY,
-        rotation: rotation,
-      };
-
-      const newZIndex = await fetch(`${API_URL}/magnet`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(update, (key, value) => {
-          if (key == "word" || key == "zIndex") return undefined;
-          else return value;
-        }),
-      }).then((r) => r.text());
-
-      element.style.zIndex = newZIndex;
+        rotation: parseInt(element.style.getPropertyValue("--rotation")),
+      });
+      webSocket.send(magnetUpdate);
     });
   }, { passive: true });
 
@@ -235,7 +224,7 @@ webSocket.onopen = () => {
   let clickOffsetX = 0;
   let clickOffsetY = 0;
 
-  async function updateCoordinatesFromHash() {
+  function updateCoordinatesFromHash() {
     const params = new URLSearchParams(globalThis.location.hash.slice(1));
     const centerX = parseInt(params.get("x") ?? "0");
     const centerY = parseInt(params.get("y") ?? "0");
@@ -253,7 +242,7 @@ webSocket.onopen = () => {
       Math.floor(canvasY + 2 * globalThis.innerHeight),
     );
 
-    await replaceMagnets();
+    webSocket.send(pack(viewWindow));
   }
 
   globalThis.addEventListener("hashchange", updateCoordinatesFromHash);

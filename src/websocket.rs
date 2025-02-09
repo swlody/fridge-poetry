@@ -18,7 +18,7 @@ use crate::{
 };
 
 #[derive(Debug, Serialize, Deserialize)]
-struct CreateMagnet {
+struct Magnet {
     id: i32,
     x: i32,
     y: i32,
@@ -38,9 +38,17 @@ struct LocationUpdate {
 
 #[derive(Debug, Serialize, Deserialize)]
 enum MagnetUpdate {
-    Create(CreateMagnet),
+    Create(Magnet),
     Move(LocationUpdate),
     Remove(i32),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct IncomingUpdate {
+    id: i32,
+    x: i32,
+    y: i32,
+    rotation: i32,
 }
 
 #[tracing::instrument]
@@ -64,7 +72,7 @@ async fn send_relevant_update(
             socket.send(buf.into()).await?;
             Ok(true)
         } else {
-            let create_update = MagnetUpdate::Create(CreateMagnet {
+            let create_update = MagnetUpdate::Create(Magnet {
                 id: magnet_update.id,
                 x: magnet_update.new_x,
                 y: magnet_update.new_y,
@@ -88,6 +96,45 @@ async fn send_relevant_update(
     } else {
         Ok(false)
     }
+}
+
+#[tracing::instrument]
+async fn send_new_magnets(socket: &mut WebSocket, window: &Window, state: &AppState) {
+    let magnets: Vec<Magnet> = sqlx::query_as!(
+        Magnet,
+        r#"SELECT id, coords[0]::int AS "x!", coords[1]::int AS "y!", rotation, word, z_index
+           FROM magnets
+           WHERE coords <@ Box(Point($1::int, $2::int), Point($3::int, $4::int))"#,
+        window.x1,
+        window.y1,
+        window.x2,
+        window.y2
+    )
+    .fetch_all(&state.postgres)
+    .await
+    .unwrap();
+
+    let buf = rmp_serde::to_vec(&magnets).unwrap();
+
+    socket.send(buf.into()).await.unwrap();
+}
+
+#[tracing::instrument]
+async fn update_magnet(update: IncomingUpdate, state: &AppState) {
+    // TODO coherence checks: inside area bounds and rotation within correct range
+
+    sqlx::query!(
+        r#"UPDATE magnets
+           SET coords = Point($1::int, $2::int), rotation = $3, z_index = nextval('magnets_z_index_seq')
+           WHERE id = $4"#,
+        update.x,
+        update.y,
+        update.rotation,
+        update.id
+    )
+    .execute(&state.postgres)
+    .await
+    .unwrap();
 }
 
 #[tracing::instrument]
@@ -124,6 +171,9 @@ async fn handle_socket(mut socket: WebSocket, who: SocketAddr, state: AppState) 
                     Some(Ok(Message::Binary(bytes))) => {
                         if let Ok(window_update) = rmp_serde::from_slice(&bytes) {
                             client_window = window_update;
+                            send_new_magnets(&mut socket, &client_window, &state).await;
+                        } else if let Ok(location_update) = rmp_serde::from_slice(&bytes) {
+                            update_magnet(location_update, &state).await;
                         } else {
                             tracing::debug!("Received unknown msgpack");
                         }
