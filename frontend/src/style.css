@@ -21,6 +21,10 @@
   background: white;
 }
 
+.magnet:active {
+  cursor: grabbing;
+}
+
 .fake-magnet {
   border: 1px solid black;
   font-family: Georgia, "Times New Roman", Times, serif;
@@ -61,8 +65,8 @@ footer {
   height: 10vh;
   animation: spin 1s linear infinite;
   position: absolute;
-  left: calc(50vw - 5vh);
-  top: 45vh;
+  left: calc(50% - 5vh - 16px);
+  top: calc(50% - 5vh - 16px);
 }
 
 @keyframes spin {
