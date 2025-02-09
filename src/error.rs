@@ -19,14 +19,14 @@ pub enum FridgeError {
 impl IntoResponse for FridgeError {
     fn into_response(self) -> Response {
         match self {
-            FridgeError::NotFound => StatusCode::NOT_FOUND.into_response(),
+            Self::NotFound => StatusCode::NOT_FOUND.into_response(),
 
-            FridgeError::Sqlx(e) => {
+            Self::Sqlx(e) => {
                 tracing::error!("{e:?}");
                 StatusCode::INTERNAL_SERVER_ERROR.into_response()
             }
 
-            FridgeError::Other(e) => {
+            Self::Other(e) => {
                 tracing::error!("{e:?}");
                 StatusCode::INTERNAL_SERVER_ERROR.into_response()
             }

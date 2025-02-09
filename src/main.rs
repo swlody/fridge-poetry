@@ -62,16 +62,9 @@ fn main() -> Result<()> {
 
     tracing_subscriber::fmt()
         .with_target(true)
-        .with_max_level(
-            config
-                .log_level
-                .as_ref()
-                .map(|s| {
-                    Level::from_str(&s)
-                        .unwrap_or_else(|_| panic!("Invalid value for FRIDGE_LOG_LEVEL: {s}"))
-                })
-                .unwrap_or(Level::DEBUG),
-        )
+        .with_max_level(config.log_level.as_ref().map_or(Level::DEBUG, |s| {
+            Level::from_str(s).unwrap_or_else(|_| panic!("Invalid value for FRIDGE_LOG_LEVEL: {s}"))
+        }))
         .pretty()
         .finish()
         .with(sentry::integrations::tracing::layer())
@@ -107,13 +100,13 @@ async fn broadcast_changes(
 ) {
     loop {
         select! {
-            _ = token.cancelled() => {
+            () = token.cancelled() => {
                 break;
             },
             res = pg_change_listener.recv() => {
                 match res {
                     Ok(msg) => {
-                        let magnet_update = serde_json::from_str(&msg.payload()).expect("Received invalid JSON from postgres");
+                        let magnet_update = serde_json::from_str(msg.payload()).expect("Received invalid JSON from postgres");
                         if tx.len() >= 10 {
                             tracing::error!(
                                 "Potentially dropping queued magnet updates.\
@@ -172,8 +165,7 @@ async fn run(config: Config) -> Result<()> {
                     config
                         .cors_origin
                         .and_then(|s| HeaderValue::from_str(s.as_str()).ok())
-                        .map(AllowOrigin::from)
-                        .unwrap_or(AllowOrigin::any()),
+                        .map_or_else(AllowOrigin::any, AllowOrigin::from),
                 )
                 .allow_headers(Any),
         );
@@ -199,7 +191,7 @@ async fn run(config: Config) -> Result<()> {
     .with_graceful_shutdown(shutdown_signal())
     .await?;
 
-    // TODO do browsers see websocket close?
+    // TODO gracefully close websockets too? Can pass token in state
     token.cancel();
     broadcast_changes_task.await?;
 
@@ -225,7 +217,7 @@ async fn shutdown_signal() {
     let terminate = std::future::pending::<()>();
 
     tokio::select! {
-        _ = ctrl_c => {},
-        _ = terminate => {},
+        () = ctrl_c => {},
+        () = terminate => {},
     }
 }

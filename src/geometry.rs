@@ -7,7 +7,7 @@ pub struct Point {
 }
 
 impl Point {
-    pub fn new(x: i32, y: i32) -> Self {
+    pub const fn new(x: i32, y: i32) -> Self {
         Self { x, y }
     }
 }
@@ -21,7 +21,7 @@ pub struct Window {
 }
 
 impl Window {
-    pub fn contains(&self, point: Point) -> bool {
+    pub const fn contains(&self, point: &Point) -> bool {
         point.x >= self.x1 && point.x <= self.x2 && point.y >= self.y1 && point.y <= self.y2
     }
 }
