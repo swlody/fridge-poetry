@@ -145,6 +145,7 @@ async function replaceMagnets() {
 
   newElements.querySelectorAll(".magnet").forEach((magnet) => {
     const element = magnet as HTMLElement;
+
     let clickOffsetX = 0;
     let clickOffsetY = 0;
 
@@ -153,17 +154,6 @@ async function replaceMagnets() {
 
     let newX = 0;
     let newY = 0;
-
-    function resetPointerState() {
-      clickOffsetX = 0;
-      clickOffsetY = 0;
-
-      originalX = 0;
-      originalY = 0;
-
-      newX = 0;
-      newY = 0;
-    }
 
     let isDragging = false;
 
@@ -177,6 +167,7 @@ async function replaceMagnets() {
       element.setPointerCapture(e.pointerId);
       isDragging = true;
 
+      element.style.cursor = "grabbing";
       element.style.zIndex = String(Number.MAX_SAFE_INTEGER);
 
       clickOffsetX = Math.floor(e.clientX - element.offsetLeft);
@@ -186,7 +177,7 @@ async function replaceMagnets() {
       originalY = parseInt(element.style.getPropertyValue("--local-y"));
     }, { passive: true });
 
-    door.addEventListener("pointermove", (e) => {
+    element.addEventListener("pointermove", (e) => {
       if (!isDragging) return;
 
       newX = Math.floor(originalX + e.clientX - clickOffsetX);
@@ -200,6 +191,8 @@ async function replaceMagnets() {
       e.stopPropagation();
       element.releasePointerCapture(e.pointerId);
       isDragging = false;
+
+      element.style.cursor = "grab";
 
       updateMagnet();
 
@@ -225,15 +218,13 @@ async function replaceMagnets() {
       }).then((r) => r.text());
 
       element.style.zIndex = newZIndex;
-
-      resetPointerState();
     });
   }, { passive: true });
 
   door.append(newElements);
 }
 
-webSocket.onopen = async () => {
+webSocket.onopen = () => {
   door = document.getElementById("door")!;
 
   let canvasX: number;
@@ -244,7 +235,11 @@ webSocket.onopen = async () => {
   let clickOffsetX = 0;
   let clickOffsetY = 0;
 
-  function updateCoordinates(centerX: number, centerY: number) {
+  async function updateCoordinatesFromHash() {
+    const params = new URLSearchParams(globalThis.location.hash.slice(1));
+    const centerX = parseInt(params.get("x") ?? "0");
+    const centerY = parseInt(params.get("y") ?? "0");
+
     canvasX = Math.floor(centerX - globalThis.innerWidth / 2);
     canvasY = Math.floor(-centerY - globalThis.innerHeight / 2);
 
@@ -257,26 +252,13 @@ webSocket.onopen = async () => {
       Math.floor(canvasX + 2 * globalThis.innerWidth),
       Math.floor(canvasY + 2 * globalThis.innerHeight),
     );
-  }
 
-  let disableNextHashCallback = false;
-  function updateCoordinatesFromHash() {
-    if (disableNextHashCallback) {
-      disableNextHashCallback = false;
-      return;
-    }
-
-    const params = new URLSearchParams(globalThis.location.hash.slice(1));
-    const centerX = parseInt(params.get("x") ?? "0");
-    const centerY = parseInt(params.get("y") ?? "0");
-
-    updateCoordinates(centerX, centerY);
+    await replaceMagnets();
   }
 
   globalThis.addEventListener("hashchange", updateCoordinatesFromHash);
 
   updateCoordinatesFromHash();
-  await replaceMagnets();
   door.removeChild(document.getElementById("loader")!);
 
   function updateWindow() {
@@ -291,6 +273,7 @@ webSocket.onopen = async () => {
   }
 
   document.addEventListener("pointerdown", (e) => {
+    if (isDraggingWindow) return;
     door.setPointerCapture(e.pointerId);
     isDraggingWindow = true;
 
@@ -307,22 +290,14 @@ webSocket.onopen = async () => {
     requestAnimationFrame(updateWindow);
   }, { passive: true });
 
-  document.addEventListener("pointerup", async (e) => {
+  document.addEventListener("pointerup", (e) => {
     if (!isDraggingWindow) return;
     door.releasePointerCapture(e.pointerId);
     isDraggingWindow = false;
 
     const centerX = Math.floor(canvasX + globalThis.innerWidth / 2);
     const centerY = -1 * Math.floor(canvasY + globalThis.innerHeight / 2);
-    disableNextHashCallback = true;
     globalThis.location.hash = `x=${centerX}&y=${centerY}`;
-
-    updateCoordinates(centerX, centerY);
-
-    await replaceMagnets();
-
-    clickOffsetX = 0;
-    clickOffsetY = 0;
   }, { passive: true });
 };
 
