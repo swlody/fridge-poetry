@@ -32,7 +32,7 @@ use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _
 
 use crate::{
     middleware::{MakeRequestUuidV7, SentryReportRequestInfoLayer},
-    state::{AppState, MagnetUpdate},
+    state::{AppState, PgMagnetUpdate},
 };
 
 #[global_allocator]
@@ -101,7 +101,7 @@ fn main() -> Result<()> {
 }
 
 async fn broadcast_changes(
-    tx: tokio::sync::broadcast::Sender<MagnetUpdate>,
+    tx: tokio::sync::broadcast::Sender<PgMagnetUpdate>,
     token: CancellationToken,
     mut pg_change_listener: PgListener,
 ) {
@@ -199,6 +199,7 @@ async fn run(config: Config) -> Result<()> {
     .with_graceful_shutdown(shutdown_signal())
     .await?;
 
+    // TODO do browsers see websocket close?
     token.cancel();
     broadcast_changes_task.await?;
 

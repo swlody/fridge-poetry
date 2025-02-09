@@ -17,6 +17,7 @@ struct Magnet {
     id: i32,
     x: i32,
     y: i32,
+    // TODO reduce
     rotation: i32,
     z_index: Option<i64>,
     word: Option<String>,
@@ -32,10 +33,10 @@ async fn magnets(
         r#"SELECT id, coords[0]::int AS "x!", coords[1]::int AS "y!", rotation, word, z_index
            FROM magnets
            WHERE coords <@ Box(Point($1::int, $2::int), Point($3::int, $4::int))"#,
-        window.min_x,
-        window.min_y,
-        window.max_x,
-        window.max_y
+        window.x1,
+        window.y1,
+        window.x2,
+        window.y2
     )
     .fetch_all(&state.postgres)
     .await?;
