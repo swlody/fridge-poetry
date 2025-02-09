@@ -1,3 +1,5 @@
+import { pack, unpack } from "msgpackr";
+
 import "./style.css";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL || "api";
@@ -8,16 +10,16 @@ class Magnet {
   x: number;
   y: number;
   rotation: number;
-  word: string;
   zIndex: number;
+  word: string;
 
   constructor(
     id: number,
     x: number,
     y: number,
     rotation: number,
-    word: string,
     zIndex: number,
+    word: string,
   ) {
     this.id = id;
     this.x = x;
@@ -31,24 +33,24 @@ class Magnet {
 // Window that represents the total area of magnets in the DOM
 // This is a 3x3 grid of [viewport area] centered at the actual viewport
 class Window {
-  minX: number;
-  minY: number;
-  maxX: number;
-  maxY: number;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
 
-  constructor(minX: number, minY: number, maxX: number, maxY: number) {
-    this.minX = minX;
-    this.minY = minY;
-    this.maxX = maxX;
-    this.maxY = maxY;
+  constructor(x1: number, y1: number, x2: number, y2: number) {
+    this.x1 = x1;
+    this.y1 = y1;
+    this.x2 = x2;
+    this.y2 = y2;
   }
 
-  contains(x: number, y: number): boolean {
+  constains(x: number, y: number): boolean {
     return (
-      x >= this.minX &&
-      x <= this.maxX &&
-      y >= this.minY &&
-      y <= this.maxY
+      x >= this.x1 &&
+      x <= this.x2 &&
+      y >= this.y1 &&
+      y <= this.y2
     );
   }
 }
@@ -71,32 +73,38 @@ const webSocket = new WebSocket(WS_URL);
 
 // TODO consider race conditions between this and mouseup replaceMagnets
 // We receive an update to a magnet within our window
-webSocket.onmessage = (e) => {
-  // TODO what if it's something else?
-  const update = JSON.parse(e.data);
-  const element = document.getElementById(`${update.id}`);
+webSocket.onmessage = async (e) => {
+  const arrayBuffer = await e.data.arrayBuffer(); // Convert Blob to ArrayBuffer
+  const uint8Array = new Uint8Array(arrayBuffer);
 
-  // Received update for magnet within our window
-  if (element && viewWindow.contains(update.new_x, update.new_y)) {
+  const update = unpack(uint8Array);
+
+  if (update.Move) {
+    // Received update for magnet within our window
+    const move = update.Move;
+    const element = document.getElementById(`${move[0]}`)!;
+
     // Object is moving within bounds, update its values
-    element.style.setProperty("--local-x", `${update.new_x}px`);
-    element.style.setProperty("--local-y", `${update.new_y}px`);
-    element.style.setProperty("--rotation", `${update.rotation}deg`);
-    element.style.zIndex = update.z_index;
-  } else if (element) {
+    element.style.setProperty("--local-x", `${move[1]}px`);
+    element.style.setProperty("--local-y", `${move[2]}px`);
+    element.style.setProperty("--rotation", `${move[3]}deg`);
+    element.style.zIndex = move[4].toString();
+  } else if (update.Remove) {
     // Magnet left our window, remove it
+    const remove = update.Remove;
+    const element = document.getElementById(`${remove}`)!;
     door.removeChild(element);
   } else {
     // New object arriving from out of bounds, create it
     // Since we received the update, it must be for a removal
-    // TODO for removals we can just send a remove message from backend with ID, no need for old_x, old_y
+    const create = update.Create;
     const magnet = new Magnet(
-      update.id,
-      update.new_x,
-      update.new_y,
-      update.rotation,
-      update.word,
-      update.z_index,
+      create[0],
+      create[1],
+      create[2],
+      create[3],
+      create[4],
+      create[5],
     );
     door.append(createMagnet(magnet));
   }
@@ -105,10 +113,10 @@ webSocket.onmessage = (e) => {
 let viewWindow: Window;
 
 async function replaceMagnets() {
-  webSocket.send(JSON.stringify(viewWindow));
+  webSocket.send(pack(viewWindow));
 
   const magnetArray = await fetch(
-    `${API_URL}/magnets?minX=${viewWindow.minX}&minY=${viewWindow.minY}&maxX=${viewWindow.maxX}&maxY=${viewWindow.maxY}`,
+    `${API_URL}/magnets?x1=${viewWindow.x1}&y1=${viewWindow.y1}&x2=${viewWindow.x2}&y2=${viewWindow.y2}`,
   ).then((r) => r.json());
 
   const missingMagnetIds = new Set();
@@ -316,4 +324,8 @@ webSocket.onopen = async () => {
     clickOffsetX = 0;
     clickOffsetY = 0;
   }, { passive: true });
+};
+
+webSocket.onclose = () => {
+  console.log("WebSocket connection closed");
 };

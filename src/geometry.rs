@@ -13,19 +13,15 @@ impl Point {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
 pub struct Window {
-    pub min_x: i32,
-    pub min_y: i32,
-    pub max_x: i32,
-    pub max_y: i32,
+    pub x1: i32,
+    pub y1: i32,
+    pub x2: i32,
+    pub y2: i32,
 }
 
 impl Window {
     pub fn contains(&self, point: Point) -> bool {
-        point.x >= self.min_x
-            && point.x <= self.max_x
-            && point.y >= self.min_y
-            && point.y <= self.max_y
+        point.x >= self.x1 && point.x <= self.x2 && point.y >= self.y1 && point.y <= self.y2
     }
 }
