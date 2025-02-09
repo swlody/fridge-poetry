@@ -68,55 +68,46 @@ function createMagnet(magnet: Magnet): HTMLElement {
   return element;
 }
 
-function getMagnetsFromArray(array) {
-  const magnets: Magnet[] = [];
-  for (const val of array) {
-    magnets.push(new Magnet(val[0], val[1], val[2], val[3], val[4], val[5]));
-  }
-  return magnets;
-}
-
 const webSocket = new WebSocket(WS_URL);
 
 // TODO consider race conditions between this and mouseup replaceMagnets
 // We receive an update to a magnet within our window
 webSocket.onmessage = async (e) => {
-  const arrayBuffer = await e.data.arrayBuffer(); // Convert Blob to ArrayBuffer
-  const uint8Array = new Uint8Array(arrayBuffer);
+  // gross untyped nonsense, yuck yuck yuck
+  const update = unpack(await e.data.arrayBuffer());
 
-  const update = unpack(uint8Array);
-
-  if (update instanceof Array) {
-    const magnets = getMagnetsFromArray(update);
+  // inferring the type of the update based on structure 🤢
+  if (update[0] instanceof Array) {
+    console.log("canvas");
+    const magnets = [];
+    for (const val of update) {
+      magnets.push(new Magnet(val[0], val[1], val[2], val[3], val[4], val[5]));
+    }
     replaceMagnets(magnets);
-  } else if (update.Move) {
-    // Received update for magnet within our window
-    const move = update.Move;
-    const element = document.getElementById(`${move[0]}`)!;
-
-    // Object is moving within bounds, update its values
-    element.style.setProperty("--local-x", `${move[1]}px`);
-    element.style.setProperty("--local-y", `${move[2]}px`);
-    element.style.setProperty("--rotation", `${move[3]}deg`);
-    element.style.zIndex = move[4].toString();
-  } else if (update.Remove) {
-    // Magnet left our window, remove it
-    const remove = update.Remove;
-    const element = document.getElementById(`${remove}`)!;
-    door.removeChild(element);
-  } else {
+  } else if (update[5] !== undefined) {
     // New object arriving from out of bounds, create it
-    // Since we received the update, it must be for a removal
-    const create = update.Create;
     const magnet = new Magnet(
-      create[0],
-      create[1],
-      create[2],
-      create[3],
-      create[4],
-      create[5],
+      update[0],
+      update[1],
+      update[2],
+      update[3],
+      update[4],
+      update[5],
     );
     door.append(createMagnet(magnet));
+  } else if (update[4] !== undefined) {
+    // Received update for magnet within our window
+    const element = document.getElementById(`${update[0]}`)!;
+
+    // Object is moving within bounds, update its values
+    element.style.setProperty("--local-x", `${update[1]}px`);
+    element.style.setProperty("--local-y", `${update[2]}px`);
+    element.style.setProperty("--rotation", `${update[3]}deg`);
+    element.style.zIndex = update[4].toString();
+  } else {
+    // Received indication that magnet was removed from our window
+    const element = document.getElementById(`${update}`)!;
+    door.removeChild(element);
   }
 };
 
@@ -200,12 +191,14 @@ function replaceMagnets(magnetArray: Magnet[]) {
 
       updateMagnet();
 
-      const magnetUpdate = pack({
-        id: parseInt(element.id),
-        x: newX,
-        y: newY,
-        rotation: parseInt(element.style.getPropertyValue("--rotation")),
-      });
+      const magnetUpdate = pack(
+        {
+          id: parseInt(element.id),
+          x: newX,
+          y: newY,
+          rotation: parseInt(element.style.getPropertyValue("--rotation")),
+        },
+      );
       webSocket.send(magnetUpdate);
     });
   }, { passive: true });
@@ -288,8 +281,4 @@ webSocket.onopen = () => {
     const centerY = -1 * Math.floor(canvasY + globalThis.innerHeight / 2);
     globalThis.location.hash = `x=${centerX}&y=${centerY}`;
   }, { passive: true });
-};
-
-webSocket.onclose = () => {
-  console.log("WebSocket connection closed");
 };

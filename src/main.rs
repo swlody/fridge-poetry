@@ -1,6 +1,5 @@
 mod api;
 mod error;
-mod geometry;
 mod middleware;
 mod state;
 mod websocket;
@@ -12,7 +11,6 @@ use axum::{
     http::{HeaderValue, Method},
     Router,
 };
-use error::FridgeError;
 use mimalloc::MiMalloc;
 use secrecy::{ExposeSecret as _, SecretString};
 use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
@@ -178,7 +176,6 @@ async fn run(config: Config) -> Result<()> {
     let app = Router::new()
         .merge(api::routes())
         .nest("/ws", websocket::routes())
-        .fallback(|| async { FridgeError::NotFound })
         .layer(service_builder)
         .with_state(app_state);
 
