@@ -112,7 +112,7 @@ where
             sentry::configure_scope(|scope| {
                 if let Some(span) = scope.get_span() {
                     span.set_status(sentry_status);
-                };
+                }
                 scope.set_tag(
                     "http.response.status_code",
                     http_status.as_u16().to_string(),

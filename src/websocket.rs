@@ -1,9 +1,7 @@
-use std::net::SocketAddr;
-
 use axum::{
     extract::{
         ws::{Message, WebSocket},
-        ConnectInfo, State, WebSocketUpgrade,
+        State, WebSocketUpgrade,
     },
     response::IntoResponse,
     routing::get,
@@ -51,14 +49,15 @@ struct IncomingUpdate {
     rotation: i32,
 }
 
+// TODO attach timestamp?
 #[tracing::instrument]
 async fn send_relevant_update(
     socket: &mut WebSocket,
     client_window: &Window,
     magnet_update: PgMagnetUpdate,
 ) -> Result<bool, axum::Error> {
-    if client_window.contains(Point::new(magnet_update.new_x, magnet_update.new_y)) {
-        if client_window.contains(Point::new(magnet_update.old_x, magnet_update.old_y)) {
+    if client_window.contains(&Point::new(magnet_update.new_x, magnet_update.new_y)) {
+        if client_window.contains(&Point::new(magnet_update.old_x, magnet_update.old_y)) {
             let location_update = MagnetUpdate::Move(LocationUpdate {
                 id: magnet_update.id,
                 x: magnet_update.new_x,
@@ -70,7 +69,6 @@ async fn send_relevant_update(
             let buf = rmp_serde::to_vec(&location_update).unwrap();
 
             socket.send(buf.into()).await?;
-            Ok(true)
         } else {
             let create_update = MagnetUpdate::Create(Magnet {
                 id: magnet_update.id,
@@ -84,9 +82,9 @@ async fn send_relevant_update(
             let buf = rmp_serde::to_vec(&create_update).unwrap();
 
             socket.send(buf.into()).await?;
-            Ok(true)
         }
-    } else if client_window.contains(Point::new(magnet_update.old_x, magnet_update.old_y)) {
+        Ok(true)
+    } else if client_window.contains(&Point::new(magnet_update.old_x, magnet_update.old_y)) {
         let remove_update = MagnetUpdate::Remove(magnet_update.id);
 
         let buf = rmp_serde::to_vec(&remove_update).unwrap();
@@ -138,16 +136,11 @@ async fn update_magnet(update: IncomingUpdate, state: &AppState) {
 }
 
 #[tracing::instrument]
-async fn ws_handler(
-    ws: WebSocketUpgrade,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    State(state): State<AppState>,
-) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_socket(socket, addr, state))
+async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
 
-#[tracing::instrument]
-async fn handle_socket(mut socket: WebSocket, who: SocketAddr, state: AppState) {
+async fn handle_socket(mut socket: WebSocket, state: AppState) {
     let mut rx = state.magnet_updates.subscribe();
     let mut client_window = Window::default();
 
@@ -184,7 +177,7 @@ async fn handle_socket(mut socket: WebSocket, who: SocketAddr, state: AppState) 
                     }
                     Some(thing) => {
                         // TODO just disconnect if we receive invalid data?
-                        tracing::debug!("Received unexpected message over websocket: {thing:?}")
+                        tracing::debug!("Received unexpected message over websocket: {thing:?}");
                     }
                     None => {
                         break;
