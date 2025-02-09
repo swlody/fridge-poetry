@@ -78,7 +78,6 @@ webSocket.onmessage = async (e) => {
 
   // inferring the type of the update based on structure 🤢
   if (update[0] instanceof Array) {
-    console.log("canvas");
     const magnets = [];
     for (const val of update) {
       magnets.push(new Magnet(val[0], val[1], val[2], val[3], val[4], val[5]));
