@@ -11,9 +11,23 @@ use serde::{Deserialize, Serialize};
 use tokio::select;
 
 use crate::{
-    geometry::{Point, Window},
+    error::FridgeError,
     state::{AppState, PgMagnetUpdate},
 };
+
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+struct Window {
+    x1: i32,
+    y1: i32,
+    x2: i32,
+    y2: i32,
+}
+
+impl Window {
+    const fn contains(&self, x: i32, y: i32) -> bool {
+        x >= self.x1 && x <= self.x2 && y >= self.y1 && y <= self.y2
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Magnet {
@@ -34,19 +48,28 @@ struct LocationUpdate {
     z_index: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
 enum MagnetUpdate {
     Create(Magnet),
     Move(LocationUpdate),
     Remove(i32),
+    CanvasUpdate(Vec<Magnet>),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct IncomingUpdate {
+struct ClientMagnetUpdate {
     id: i32,
     x: i32,
     y: i32,
     rotation: i32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum ClientUpdate {
+    Window(Window),
+    Magnet(ClientMagnetUpdate),
 }
 
 // TODO attach timestamp?
@@ -56,8 +79,8 @@ async fn send_relevant_update(
     client_window: &Window,
     magnet_update: PgMagnetUpdate,
 ) -> Result<bool, axum::Error> {
-    if client_window.contains(&Point::new(magnet_update.new_x, magnet_update.new_y)) {
-        if client_window.contains(&Point::new(magnet_update.old_x, magnet_update.old_y)) {
+    if client_window.contains(magnet_update.new_x, magnet_update.new_y) {
+        if client_window.contains(magnet_update.old_x, magnet_update.old_y) {
             let location_update = MagnetUpdate::Move(LocationUpdate {
                 id: magnet_update.id,
                 x: magnet_update.new_x,
@@ -67,7 +90,6 @@ async fn send_relevant_update(
             });
 
             let buf = rmp_serde::to_vec(&location_update).unwrap();
-
             socket.send(buf.into()).await?;
         } else {
             let create_update = MagnetUpdate::Create(Magnet {
@@ -80,15 +102,13 @@ async fn send_relevant_update(
             });
 
             let buf = rmp_serde::to_vec(&create_update).unwrap();
-
             socket.send(buf.into()).await?;
         }
         Ok(true)
-    } else if client_window.contains(&Point::new(magnet_update.old_x, magnet_update.old_y)) {
+    } else if client_window.contains(magnet_update.old_x, magnet_update.old_y) {
         let remove_update = MagnetUpdate::Remove(magnet_update.id);
 
         let buf = rmp_serde::to_vec(&remove_update).unwrap();
-
         socket.send(buf.into()).await?;
         Ok(true)
     } else {
@@ -97,8 +117,12 @@ async fn send_relevant_update(
 }
 
 #[tracing::instrument]
-async fn send_new_magnets(socket: &mut WebSocket, window: &Window, state: &AppState) {
-    let magnets: Vec<Magnet> = sqlx::query_as!(
+async fn send_new_magnets(
+    socket: &mut WebSocket,
+    window: &Window,
+    state: &AppState,
+) -> Result<(), FridgeError> {
+    let magnets = sqlx::query_as!(
         Magnet,
         r#"SELECT id, coords[0]::int AS "x!", coords[1]::int AS "y!", rotation, word, z_index
            FROM magnets
@@ -109,18 +133,16 @@ async fn send_new_magnets(socket: &mut WebSocket, window: &Window, state: &AppSt
         window.y2
     )
     .fetch_all(&state.postgres)
-    .await
-    .unwrap();
+    .await?;
 
-    let buf = rmp_serde::to_vec(&magnets).unwrap();
-
-    socket.send(buf.into()).await.unwrap();
+    let buf = rmp_serde::to_vec(&MagnetUpdate::CanvasUpdate(magnets)).unwrap();
+    socket.send(buf.into()).await?;
+    Ok(())
 }
 
 #[tracing::instrument]
-async fn update_magnet(update: IncomingUpdate, state: &AppState) {
+async fn update_magnet(update: ClientMagnetUpdate, state: &AppState) -> Result<(), FridgeError> {
     // TODO coherence checks: inside area bounds and rotation within correct range
-
     sqlx::query!(
         r#"UPDATE magnets
            SET coords = Point($1::int, $2::int), rotation = $3, z_index = nextval('magnets_z_index_seq')
@@ -131,8 +153,9 @@ async fn update_magnet(update: IncomingUpdate, state: &AppState) {
         update.id
     )
     .execute(&state.postgres)
-    .await
-    .unwrap();
+    .await?;
+
+    Ok(())
 }
 
 #[tracing::instrument]
@@ -154,6 +177,7 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                     .await
                     .is_err()
                 {
+                    tracing::debug!("Unable to send single magnet update, closing connection");
                     break;
                 }
             }
@@ -162,11 +186,30 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
             message = socket.recv() => {
                 match message {
                     Some(Ok(Message::Binary(bytes))) => {
-                        if let Ok(window_update) = rmp_serde::from_slice(&bytes) {
-                            client_window = window_update;
-                            send_new_magnets(&mut socket, &client_window, &state).await;
-                        } else if let Ok(location_update) = rmp_serde::from_slice(&bytes) {
-                            update_magnet(location_update, &state).await;
+                        if let Ok(client_update) = rmp_serde::from_slice(&bytes) {
+                            match client_update {
+                                ClientUpdate::Window(window_update) => {
+                                    client_window = window_update;
+                                    match send_new_magnets(&mut socket, &client_window, &state).await {
+                                        Ok(()) => {},
+                                        Err(FridgeError::Axum(e)) => {
+                                            tracing::debug!("Unable to send new magnets, disconnecting websocket: {e}");
+                                            break;
+                                        }
+                                        Err(FridgeError::Sqlx(e)) => {
+                                            tracing::error!("Unable to get magnets from database: {e}");
+                                        }
+                                    }
+                                }
+                                ClientUpdate::Magnet(magnet_update) => {
+                                    match update_magnet(magnet_update, &state).await {
+                                        Err(FridgeError::Sqlx(e)) => {
+                                            tracing::error!("Unable to update magnet in databse: {e}");
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                            }
                         } else {
                             tracing::debug!("Received unknown msgpack");
                         }
