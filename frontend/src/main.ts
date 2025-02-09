@@ -162,7 +162,6 @@ function replaceMagnets(magnetArray: Magnet[]) {
       element.setPointerCapture(e.pointerId);
       isDragging = true;
 
-      element.style.cursor = "grabbing";
       element.style.zIndex = String(Number.MAX_SAFE_INTEGER);
 
       clickOffsetX = Math.floor(e.clientX - element.offsetLeft);
@@ -186,8 +185,6 @@ function replaceMagnets(magnetArray: Magnet[]) {
       e.stopPropagation();
       element.releasePointerCapture(e.pointerId);
       isDragging = false;
-
-      element.style.cursor = "grab";
 
       updateMagnet();
 
