@@ -21,6 +21,17 @@
   background: white;
 }
 
+.fake-magnet {
+  border: 1px solid black;
+  font-family: Georgia, "Times New Roman", Times, serif;
+  box-shadow: 3px 2px rgba(0, 0, 0, 0.6);
+  background: white;
+  padding: 5px;
+  user-select: none;
+  text-decoration: none;
+  color: black;
+}
+
 body {
   width: 100vw;
   height: 100vh;
@@ -31,13 +42,14 @@ body {
   background-size: 900px 600px;
   background-repeat: repeat;
   touch-action: none;
+  cursor: move;
 }
 
 footer {
   position: absolute;
   bottom: 0;
   right: 0;
-  margin: 8px;
+  margin: 10px;
 }
 
 /* TODO nicer/different loader */
