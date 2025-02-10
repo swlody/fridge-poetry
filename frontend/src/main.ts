@@ -1,6 +1,7 @@
 import { pack, unpack } from "msgpackr";
 
 import "./style.css";
+import { request } from "node:http";
 
 const WS_URL = import.meta.env.VITE_WS_BASE_URL || "ws";
 
@@ -276,22 +277,26 @@ function replaceMagnets(magnetArray: Magnet[]) {
 
         isDragging = false;
 
-        if (!hasMoved) {
+        if (
+          !hasMoved ||
+          (Math.abs(newX - originalX) < 0.5 && Math.abs(newY - originalY) < 0.5)
+        ) {
           if (!clickedElement) {
             showRotationDot(element);
+          } else {
+            hideRotationDot(element);
           }
-          return;
+        } else {
+          const magnetUpdate = pack(
+            {
+              id: parseInt(element.id),
+              x: Math.round(newX),
+              y: Math.round(newY),
+              rotation: parseInt(element.style.getPropertyValue("--rotation")),
+            },
+          );
+          webSocket.send(magnetUpdate);
         }
-
-        const magnetUpdate = pack(
-          {
-            id: parseInt(element.id),
-            x: Math.round(newX),
-            y: Math.round(newY),
-            rotation: parseInt(element.style.getPropertyValue("--rotation")),
-          },
-        );
-        webSocket.send(magnetUpdate);
       } else if (rotating) {
         element.releasePointerCapture(e.pointerId);
 
@@ -392,15 +397,17 @@ webSocket.onopen = () => {
     if (clickedElement) {
       if (e.target === clickedElement.firstElementChild) {
         // show cursor when we enter the dot
-        // TODO in requestAnimationFrame
-        rotateCursor.hidden = false;
-        rotateCursor.style.transform = `translate3d(${e.clientX - 8}px, ${
-          e.clientY - 8
-        }px, 0) rotate(${
-          parseInt(
-            clickedElement.style.getPropertyValue("--rotation"),
-          ) - 45
-        }deg)`;
+        requestAnimationFrame(() => {
+          if (!clickedElement) return;
+          rotateCursor.hidden = false;
+          rotateCursor.style.transform = `translate3d(${e.clientX - 8}px, ${
+            e.clientY - 8
+          }px, 0) rotate(${
+            parseInt(
+              clickedElement.style.getPropertyValue("--rotation"),
+            ) - 45
+          }deg)`;
+        });
       } else {
         // hide cursor when we leave the dot
         rotateCursor.hidden = true;
