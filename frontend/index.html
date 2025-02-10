@@ -9,17 +9,30 @@
     <meta property="og:description" content="Write a poem with the internet." />
     <meta
       property="og:image"
-      content="https://testing.fridgepoem.com/static/thumbnail.png"
+      content="https://fridgepoem.com/static/thumbnail.png"
     />
     <meta property="og:url" content="https://fridgepoem.com" />
     <script type="module" src="/src/main.ts"></script>
   </head>
   <body>
-    <main id="door">
-      <div id="loader" class="loader"></div>
-    </main>
+    <div id="loader" class="loader"></div>
+    <div id="about-dialog" class="children-hidden" hidden>
+      <p class="fake-magnet" style="rotate: 4deg">Made</p>
+      <p class="fake-magnet" style="rotate: 2deg">by</p>
+      <p class="fake-magnet" style="rotate: -3deg">
+        <a href="https://swlody.dev">Sam Wlody</a>
+      </p>
+      <p class="fake-magnet" style="rotate: 1deg">@</p>
+      <p class="fake-magnet" style="rotate: -3deg">
+        <a
+          href="https://www.recurse.com/scout/click?t=6f1a4828561e63ce05208b7fa4e098df"
+          >Recurse Center</a
+        >
+      </p>
+    </div>
+    <main id="door"></main>
     <footer id="footer">
-      <a class="fake-magnet" href="about.html">About</a>
+      <a id="about-button" class="fake-magnet">About</a>
     </footer>
   </body>
 </html>
