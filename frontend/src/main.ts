@@ -80,7 +80,18 @@ document.getElementById("about-button")!.addEventListener(
   { passive: true },
 );
 
-const webSocket = new WebSocket(WS_URL);
+let webSocket = new WebSocket(WS_URL);
+
+webSocket.onerror = (err) => {
+  console.error("Socket encountered error: ", err, "Closing socket");
+  webSocket.close();
+};
+
+webSocket.onclose = () => {
+  setTimeout(() => {
+    webSocket = new WebSocket(WS_URL);
+  });
+};
 
 // TODO consider race conditions between this and mouseup replaceMagnets
 // We receive an update to a magnet within our window
@@ -339,7 +350,7 @@ webSocket.onopen = () => {
   if (!globalThis.location.hash) {
     const randomX = Math.round(Math.random() * 100000);
     const randomY = Math.round(Math.random() * 100000);
-    globalThis.location.hash = `x=${randomX}&y=${randomY}`;
+    globalThis.location.replace(`#x=${randomX}&y=${randomY}`);
   }
 
   updateCoordinatesFromHash();
@@ -417,11 +428,11 @@ webSocket.onopen = () => {
     if (
       xDiff >= 1.0 || yDiff >= 1.0
     ) {
-      globalThis.location.hash = `x=${Math.round(newCenterX)}&y=${
+      globalThis.location.replace(`#x=${Math.round(newCenterX)}&y=${
         Math.round(
           newCenterY,
         )
-      }`;
+      }`);
     }
   }, { passive: true });
 };
