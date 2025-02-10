@@ -218,19 +218,22 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                         tracing::debug!("WebSocket closed by client: {close:?}");
                         break;
                     }
-                    Some(thing) => {
+                    Some(Ok(thing)) => {
                         // TODO just disconnect if we receive invalid data?
                         tracing::debug!("Received unexpected message over websocket: {thing:?}");
                     }
+                    Some(Err(e)) => {
+                        tracing::error!("Websocket error: {e}");
+                        break;
+                    }
                     None => {
+                        tracing::debug!("Received empty message over websocket");
                         break;
                     }
                 }
             }
         }
     }
-
-    tracing::debug!("WebSocket disconnected");
 }
 
 pub fn routes() -> Router<AppState> {
