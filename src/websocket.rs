@@ -7,6 +7,7 @@ use axum::{
     routing::get,
     Router,
 };
+
 use serde::{Deserialize, Serialize};
 use tokio::select;
 
@@ -169,6 +170,11 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
 
     loop {
         select! {
+            // TODO how to wait for this task before exiting?
+            () = state.token.cancelled() => {
+                break;
+            }
+
             // Update to a magnet entity from Postgres
             magnet_update = rx.recv() => {
                 let magnet_update = magnet_update.expect("Broadcast sender unexpectedly dropped");

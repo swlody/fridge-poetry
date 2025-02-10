@@ -63,7 +63,9 @@ function createMagnet(magnet: Magnet): HTMLElement {
   element.style.setProperty("--local-y", `${magnet.y}px`);
   element.style.setProperty("--rotation", `${magnet.rotation}deg`);
   element.style.zIndex = String(magnet.zIndex);
-  element.innerText = magnet.word;
+  element.innerHTML = `<div hidden class="dot rotate">
+    </div><div hidden class="rotate-link"></div>
+    ${magnet.word}`;
   return element;
 }
 
@@ -77,14 +79,6 @@ document.getElementById("about-button")!.addEventListener(
   },
   { passive: true },
 );
-
-document.addEventListener("pointerdown", (e) => {
-  const target = e.target as HTMLElement;
-  if (!dialog.contains(target) && !dialog.hidden) {
-    dialog.hidden = true;
-    dialog.classList.toggle("children-hidden");
-  }
-}, { passive: true });
 
 const webSocket = new WebSocket(WS_URL);
 
@@ -130,6 +124,28 @@ webSocket.onmessage = async (e) => {
 
 let viewWindow: Window;
 
+let clickedElement: HTMLElement | null = null;
+let rotating = false;
+const rotateCursor = document.getElementById("rotate-cursor")!;
+
+function showRotationDot(element: HTMLElement) {
+  for (const child of element.children) {
+    const div = child as HTMLDivElement;
+    div.hidden = false;
+  }
+
+  clickedElement = element;
+}
+
+function hideRotationDot(element: HTMLElement) {
+  for (const child of element.children) {
+    const div = child as HTMLDivElement;
+    div.hidden = true;
+  }
+
+  clickedElement = null;
+}
+
 function replaceMagnets(magnetArray: Magnet[]) {
   const missingMagnetIds = new Set();
   door.querySelectorAll(".magnet").forEach((element) => {
@@ -170,6 +186,18 @@ function replaceMagnets(magnetArray: Magnet[]) {
     let isDragging = false;
     let hasMoved = false;
 
+    let initialRotation = 0;
+    let initialAngle = 0;
+
+    function getAngle(element: HTMLElement, clientX: number, clientY: number) {
+      const rect = element.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+
+      // Calculate angle in radians, then convert to degrees
+      return Math.atan2(clientY - centerY, clientX - centerX) * (180 / Math.PI);
+    }
+
     function updateMagnet() {
       element.style.setProperty("--local-x", `${Math.round(newX)}px`);
       element.style.setProperty("--local-y", `${Math.round(newY)}px`);
@@ -177,50 +205,100 @@ function replaceMagnets(magnetArray: Magnet[]) {
 
     element.addEventListener("pointerdown", (e) => {
       element.setPointerCapture(e.pointerId);
-      isDragging = true;
-      hasMoved = false;
 
-      element.style.zIndex = String(Number.MAX_SAFE_INTEGER);
+      if (clickedElement && e.target === element.firstElementChild) {
+        rotating = true;
+        initialRotation =
+          parseInt(element.style.getPropertyValue("--rotation")) || 0;
+        initialAngle = getAngle(element, e.clientX, e.clientY);
+      } else {
+        isDragging = true;
+        hasMoved = false;
 
-      clickOffsetX = e.clientX - element.offsetLeft;
-      clickOffsetY = e.clientY - element.offsetTop;
+        element.style.zIndex = "2147483647";
 
-      originalX = parseInt(element.style.getPropertyValue("--local-x"));
-      originalY = parseInt(element.style.getPropertyValue("--local-y"));
+        clickOffsetX = e.clientX - element.offsetLeft;
+        clickOffsetY = e.clientY - element.offsetTop;
+
+        originalX = parseInt(element.style.getPropertyValue("--local-x"));
+        originalY = parseInt(element.style.getPropertyValue("--local-y"));
+      }
     }, { passive: true });
 
     element.addEventListener("pointermove", (e) => {
-      if (!isDragging) return;
-      hasMoved = true;
+      if (isDragging) {
+        if (clickedElement) {
+          hideRotationDot(clickedElement);
+        }
 
-      newX = originalX + e.clientX - clickOffsetX;
-      newY = originalY + e.clientY - clickOffsetY;
+        hasMoved = true;
 
-      requestAnimationFrame(updateMagnet);
+        newX = originalX + e.clientX - clickOffsetX;
+        newY = originalY + e.clientY - clickOffsetY;
+
+        requestAnimationFrame(updateMagnet);
+      } else if (rotating) {
+        const currentAngle = getAngle(element, e.clientX, e.clientY);
+        const angleDiff = currentAngle - initialAngle;
+        const newRotation = (initialRotation + angleDiff) % 360;
+
+        hasMoved = true;
+
+        requestAnimationFrame(() => {
+          element.style.setProperty(
+            "--rotation",
+            `${Math.round(newRotation)}deg`,
+          );
+          // Update cursor rotation
+          if (!rotateCursor.hidden) {
+            rotateCursor.style.transform = `translate3d(${e.clientX - 8}px, ${
+              e.clientY - 8
+            }px, 0) rotate(${Math.round(newRotation) - 45}deg)`;
+          }
+        });
+      }
     }, { passive: true });
 
     element.addEventListener("pointerup", (e) => {
-      if (!isDragging) return;
-      element.releasePointerCapture(e.pointerId);
-      isDragging = false;
+      if (isDragging) {
+        element.releasePointerCapture(e.pointerId);
 
-      if (!hasMoved) {
-        return;
+        isDragging = false;
+
+        if (!hasMoved) {
+          if (!clickedElement) {
+            showRotationDot(element);
+          }
+          return;
+        }
+
+        const magnetUpdate = pack(
+          {
+            id: parseInt(element.id),
+            x: Math.round(newX),
+            y: Math.round(newY),
+            rotation: parseInt(element.style.getPropertyValue("--rotation")),
+          },
+        );
+        webSocket.send(magnetUpdate);
+      } else if (rotating) {
+        element.releasePointerCapture(e.pointerId);
+
+        rotating = false;
+
+        const magnetUpdate = pack(
+          {
+            id: parseInt(element.id),
+            x: parseInt(element.style.getPropertyValue("--local-x")),
+            y: parseInt(element.style.getPropertyValue("--local-y")),
+            rotation: parseInt(element.style.getPropertyValue("--rotation")),
+          },
+        );
+
+        webSocket.send(magnetUpdate);
       }
-
-      updateMagnet();
-
-      const magnetUpdate = pack(
-        {
-          id: parseInt(element.id),
-          x: Math.round(newX),
-          y: Math.round(newY),
-          rotation: parseInt(element.style.getPropertyValue("--rotation")),
-        },
-      );
-      webSocket.send(magnetUpdate);
-    });
-  }, { passive: true });
+    }, { passive: true });
+  });
 
   door.append(newElements);
 }
@@ -281,6 +359,16 @@ webSocket.onopen = () => {
   }
 
   document.addEventListener("pointerdown", (e) => {
+    const target = e.target as HTMLElement;
+    if (!dialog.contains(target) && !dialog.hidden) {
+      dialog.hidden = true;
+      dialog.classList.toggle("children-hidden");
+    }
+
+    if (clickedElement && !clickedElement.contains(target)) {
+      hideRotationDot(clickedElement);
+    }
+
     if (e.target !== document.body || isDraggingWindow) return;
     door.setPointerCapture(e.pointerId);
     isDraggingWindow = true;
@@ -290,12 +378,30 @@ webSocket.onopen = () => {
   }, { passive: true });
 
   document.addEventListener("pointermove", (e) => {
-    if (!isDraggingWindow) return;
+    if (clickedElement) {
+      if (e.target === clickedElement.firstElementChild) {
+        // show cursor when we enter the dot
+        // TODO in requestAnimationFrame
+        rotateCursor.hidden = false;
+        rotateCursor.style.transform = `translate3d(${e.clientX - 8}px, ${
+          e.clientY - 8
+        }px, 0) rotate(${
+          parseInt(
+            clickedElement.style.getPropertyValue("--rotation"),
+          ) - 45
+        }deg)`;
+      } else {
+        // hide cursor when we leave the dot
+        rotateCursor.hidden = true;
+      }
+    }
 
-    canvasX = Math.floor(clickOffsetX - e.clientX);
-    canvasY = Math.floor(clickOffsetY - e.clientY);
+    if (isDraggingWindow) {
+      canvasX = Math.floor(clickOffsetX - e.clientX);
+      canvasY = Math.floor(clickOffsetY - e.clientY);
 
-    requestAnimationFrame(updateWindow);
+      requestAnimationFrame(updateWindow);
+    }
   }, { passive: true });
 
   document.addEventListener("pointerup", (e) => {

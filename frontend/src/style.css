@@ -37,6 +37,32 @@
   background: white;
 }
 
+.dot {
+  height: 10px;
+  width: 10px;
+  background-color: plum;
+  position: absolute;
+  border-radius: 100px;
+  border: 1px solid white;
+  user-select: none;
+}
+
+.dot.rotate {
+  top: -20px;
+  left: calc(50% - 5px);
+  cursor: none;
+}
+
+.rotate-link {
+  position: absolute;
+  width: 1px;
+  height: 15px;
+  background-color: plum;
+  top: -15px;
+  left: calc(50% + 0.5px);
+  z-index: -1;
+}
+
 body {
   width: 100vw;
   height: 100vh;
