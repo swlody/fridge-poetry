@@ -16,4 +16,5 @@ pub struct PgMagnetUpdate {
 pub struct AppState {
     pub postgres: sqlx::PgPool,
     pub magnet_updates: tokio::sync::broadcast::Sender<PgMagnetUpdate>,
+    pub token: tokio_util::sync::CancellationToken,
 }

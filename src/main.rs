@@ -171,6 +171,7 @@ async fn run(config: Config) -> Result<()> {
     let app_state = AppState {
         postgres: pool,
         magnet_updates: tx,
+        token: token.clone(),
     };
 
     let app = Router::new()
