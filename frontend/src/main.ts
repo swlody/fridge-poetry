@@ -4,29 +4,13 @@ import "./style.css";
 
 const WS_URL = import.meta.env.VITE_WS_BASE_URL || "ws";
 
-class Magnet {
+interface Magnet {
   id: number;
   x: number;
   y: number;
   rotation: number;
   zIndex: number;
   word: string;
-
-  constructor(
-    id: number,
-    x: number,
-    y: number,
-    rotation: number,
-    zIndex: number,
-    word: string,
-  ) {
-    this.id = id;
-    this.x = x;
-    this.y = y;
-    this.rotation = rotation;
-    this.word = word;
-    this.zIndex = zIndex;
-  }
 }
 
 // Window that represents the total area of magnets in the DOM
@@ -103,20 +87,26 @@ webSocket.onmessage = async (e) => {
   if (update[0] instanceof Array) {
     const magnets = [];
     for (const val of update) {
-      magnets.push(new Magnet(val[0], val[1], val[2], val[3], val[4], val[5]));
+      magnets.push({
+        id: val[0],
+        x: val[1],
+        y: val[2],
+        rotation: val[3],
+        zIndex: val[4],
+        word: val[5],
+      });
     }
     replaceMagnets(magnets);
   } else if (update[5] !== undefined) {
     // New object arriving from out of bounds, create it
-    const magnet = new Magnet(
-      update[0],
-      update[1],
-      update[2],
-      update[3],
-      update[4],
-      update[5],
-    );
-    door.append(createMagnet(magnet));
+    door.append(createMagnet({
+      id: update[0],
+      x: update[1],
+      y: update[2],
+      rotation: update[3],
+      zIndex: update[4],
+      word: update[5],
+    }));
   } else if (update[4] !== undefined) {
     // Received update for magnet within our window
     const element = document.getElementById(`${update[0]}`)!;
@@ -157,7 +147,9 @@ function hideRotationDot(element: HTMLElement) {
   clickedElement = null;
 }
 
+// Add new elements to DOM, remove old elements
 function replaceMagnets(magnetArray: Magnet[]) {
+  // Keep track of which IDs are missing from the update for later deletion
   const missingMagnetIds = new Set();
   door.querySelectorAll(".magnet").forEach((element) => {
     missingMagnetIds.add(element.id);
@@ -178,10 +170,12 @@ function replaceMagnets(magnetArray: Magnet[]) {
     }
   }
 
+  // Remove all magnets not present in update
   for (const id of missingMagnetIds) {
     door.removeChild(document.getElementById(`${id}`)!);
   }
 
+  // Add listeners to new elements
   newElements.querySelectorAll(".magnet").forEach((magnet) => {
     const element = magnet as HTMLElement;
 
@@ -195,7 +189,7 @@ function replaceMagnets(magnetArray: Magnet[]) {
     let newY = 0;
 
     let isDragging = false;
-    let hasMoved = false;
+    let hasChanged = false;
 
     let initialRotation = 0;
     let initialAngle = 0;
@@ -207,11 +201,6 @@ function replaceMagnets(magnetArray: Magnet[]) {
 
       // Calculate angle in radians, then convert to degrees
       return Math.atan2(clientY - centerY, clientX - centerX) * (180 / Math.PI);
-    }
-
-    function updateMagnet() {
-      element.style.setProperty("--local-x", `${Math.round(newX)}px`);
-      element.style.setProperty("--local-y", `${Math.round(newY)}px`);
     }
 
     element.addEventListener("pointerdown", (e) => {
@@ -226,7 +215,7 @@ function replaceMagnets(magnetArray: Magnet[]) {
         initialAngle = getAngle(element, e.clientX, e.clientY);
       } else {
         isDragging = true;
-        hasMoved = false;
+        hasChanged = false;
 
         element.style.zIndex = "2147483647";
 
@@ -244,18 +233,21 @@ function replaceMagnets(magnetArray: Magnet[]) {
           hideRotationDot(clickedElement);
         }
 
-        hasMoved = true;
+        hasChanged = true;
 
         newX = originalX + e.clientX - clickOffsetX;
         newY = originalY + e.clientY - clickOffsetY;
 
-        requestAnimationFrame(updateMagnet);
+        requestAnimationFrame(() => {
+          element.style.setProperty("--local-x", `${Math.round(newX)}px`);
+          element.style.setProperty("--local-y", `${Math.round(newY)}px`);
+        });
       } else if (rotating) {
         const currentAngle = getAngle(element, e.clientX, e.clientY);
         const angleDiff = currentAngle - initialAngle;
         const newRotation = (initialRotation + angleDiff) % 360;
 
-        hasMoved = true;
+        hasChanged = true;
 
         requestAnimationFrame(() => {
           element.style.setProperty(
@@ -279,7 +271,7 @@ function replaceMagnets(magnetArray: Magnet[]) {
         isDragging = false;
 
         if (
-          !hasMoved ||
+          !hasChanged ||
           (Math.abs(newX - originalX) < 0.5 && Math.abs(newY - originalY) < 0.5)
         ) {
           if (!clickedElement) {
@@ -320,7 +312,16 @@ function replaceMagnets(magnetArray: Magnet[]) {
   door.append(newElements);
 }
 
+// Don't rerun all this logic if we are reconnecting to lost websocket connection
+let hasAlreadyOpened = false;
 webSocket.onopen = () => {
+  if (hasAlreadyOpened) {
+    // Re-request the whole window in case stuff was lost while disconnected
+    updateCoordinatesFromHash();
+    return;
+  }
+  hasAlreadyOpened = true;
+
   let canvasX: number;
   let canvasY: number;
 
