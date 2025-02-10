@@ -1,7 +1,6 @@
 import { pack, unpack } from "msgpackr";
 
 import "./style.css";
-import { request } from "node:http";
 
 const WS_URL = import.meta.env.VITE_WS_BASE_URL || "ws";
 
@@ -216,6 +215,8 @@ function replaceMagnets(magnetArray: Magnet[]) {
     }
 
     element.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+
       element.setPointerCapture(e.pointerId);
 
       if (clickedElement && e.target === element.firstElementChild) {
@@ -375,6 +376,8 @@ webSocket.onopen = () => {
   }
 
   document.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+
     const target = e.target as HTMLElement;
     if (!dialog.contains(target) && !dialog.hidden) {
       dialog.hidden = true;
