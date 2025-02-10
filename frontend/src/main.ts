@@ -79,7 +79,8 @@ document.getElementById("about-button")!.addEventListener(
 );
 
 document.addEventListener("pointerdown", (e) => {
-  if (e.target === document.body && !dialog.hidden) {
+  const target = e.target as HTMLElement;
+  if (!dialog.contains(target) && !dialog.hidden) {
     dialog.hidden = true;
     dialog.classList.toggle("children-hidden");
   }
@@ -175,7 +176,6 @@ function replaceMagnets(magnetArray: Magnet[]) {
     }
 
     element.addEventListener("pointerdown", (e) => {
-      e.stopPropagation();
       element.setPointerCapture(e.pointerId);
       isDragging = true;
       hasMoved = false;
@@ -201,7 +201,6 @@ function replaceMagnets(magnetArray: Magnet[]) {
 
     element.addEventListener("pointerup", (e) => {
       if (!isDragging) return;
-      e.stopPropagation();
       element.releasePointerCapture(e.pointerId);
       isDragging = false;
 
@@ -282,7 +281,7 @@ webSocket.onopen = () => {
   }
 
   document.addEventListener("pointerdown", (e) => {
-    if (isDraggingWindow) return;
+    if (e.target !== document.body || isDraggingWindow) return;
     door.setPointerCapture(e.pointerId);
     isDraggingWindow = true;
 
