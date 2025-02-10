@@ -17,6 +17,7 @@
   font-family: Georgia, "Times New Roman", Times, serif;
   box-shadow: 3px 2px rgba(0, 0, 0, 0.6);
   user-select: none;
+  -webkit-user-select: none;
   cursor: grab;
   background: white;
 }
@@ -27,13 +28,13 @@
 
 .fake-magnet {
   border: 1px solid black;
+  display: inline-block;
+  padding: 5px;
   font-family: Georgia, "Times New Roman", Times, serif;
   box-shadow: 3px 2px rgba(0, 0, 0, 0.6);
-  background: white;
-  padding: 5px;
   user-select: none;
-  text-decoration: none;
-  color: black;
+  -webkit-user-select: none;
+  background: white;
 }
 
 body {
@@ -49,6 +50,31 @@ body {
   cursor: move;
 }
 
+#about-dialog {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  padding: 1rem;
+  transform: translate(-50%, -50%);
+  display: inline-block;
+  cursor: auto;
+  user-select: none;
+  -webkit-user-select: none;
+  z-index: 2147483647;
+}
+
+#about-button {
+  z-index: 2147483647;
+}
+
+#about-button:hover {
+  cursor: pointer;
+}
+
+.children-hidden > * {
+  display: none;
+}
+
 footer {
   position: absolute;
   bottom: 0;
@@ -58,22 +84,23 @@ footer {
 
 /* TODO nicer/different loader */
 .loader {
-  border: 16px solid #f3f3f3; /* Light grey */
-  border-top: 16px solid #3498db; /* Blue */
+  border: 12px solid lightgray; /* Light grey */
+  border-top: 12px solid plum; /* Blue */
   border-radius: 50%;
-  width: 10vh;
-  height: 10vh;
+  width: 8vh;
+  height: 8vh;
   animation: spin 1s linear infinite;
   position: absolute;
-  left: calc(50% - 5vh - 16px);
-  top: calc(50% - 5vh - 16px);
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
 }
 
 @keyframes spin {
   0% {
-    transform: rotate(0deg);
+    transform: translate(-50%, -50%) rotate(0deg);
   }
   100% {
-    transform: rotate(360deg);
+    transform: translate(-50%, -50%) rotate(360deg);
   }
 }

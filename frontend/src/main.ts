@@ -54,8 +54,7 @@ class Window {
   }
 }
 
-let door: HTMLElement;
-
+const door = document.getElementById("door")!;
 function createMagnet(magnet: Magnet): HTMLElement {
   const element = document.createElement("div");
   element.className = "magnet";
@@ -67,6 +66,24 @@ function createMagnet(magnet: Magnet): HTMLElement {
   element.innerText = magnet.word;
   return element;
 }
+
+const dialog = document.getElementById("about-dialog")! as HTMLElement;
+document.getElementById("about-button")!.addEventListener(
+  "pointerdown",
+  (e) => {
+    e.stopPropagation();
+    dialog.hidden = !dialog.hidden;
+    dialog.classList.toggle("children-hidden");
+  },
+  { passive: true },
+);
+
+document.addEventListener("pointerdown", (e) => {
+  if (e.target === document.body && !dialog.hidden) {
+    dialog.hidden = true;
+    dialog.classList.toggle("children-hidden");
+  }
+}, { passive: true });
 
 const webSocket = new WebSocket(WS_URL);
 
@@ -150,21 +167,23 @@ function replaceMagnets(magnetArray: Magnet[]) {
     let newY = 0;
 
     let isDragging = false;
+    let hasMoved = false;
 
     function updateMagnet() {
-      element.style.setProperty("--local-x", `${newX}px`);
-      element.style.setProperty("--local-y", `${newY}px`);
+      element.style.setProperty("--local-x", `${Math.round(newX)}px`);
+      element.style.setProperty("--local-y", `${Math.round(newY)}px`);
     }
 
     element.addEventListener("pointerdown", (e) => {
       e.stopPropagation();
       element.setPointerCapture(e.pointerId);
       isDragging = true;
+      hasMoved = false;
 
       element.style.zIndex = String(Number.MAX_SAFE_INTEGER);
 
-      clickOffsetX = Math.floor(e.clientX - element.offsetLeft);
-      clickOffsetY = Math.floor(e.clientY - element.offsetTop);
+      clickOffsetX = e.clientX - element.offsetLeft;
+      clickOffsetY = e.clientY - element.offsetTop;
 
       originalX = parseInt(element.style.getPropertyValue("--local-x"));
       originalY = parseInt(element.style.getPropertyValue("--local-y"));
@@ -172,9 +191,10 @@ function replaceMagnets(magnetArray: Magnet[]) {
 
     element.addEventListener("pointermove", (e) => {
       if (!isDragging) return;
+      hasMoved = true;
 
-      newX = Math.floor(originalX + e.clientX - clickOffsetX);
-      newY = Math.floor(originalY + e.clientY - clickOffsetY);
+      newX = originalX + e.clientX - clickOffsetX;
+      newY = originalY + e.clientY - clickOffsetY;
 
       requestAnimationFrame(updateMagnet);
     }, { passive: true });
@@ -185,13 +205,17 @@ function replaceMagnets(magnetArray: Magnet[]) {
       element.releasePointerCapture(e.pointerId);
       isDragging = false;
 
+      if (!hasMoved) {
+        return;
+      }
+
       updateMagnet();
 
       const magnetUpdate = pack(
         {
           id: parseInt(element.id),
-          x: newX,
-          y: newY,
+          x: Math.round(newX),
+          y: Math.round(newY),
           rotation: parseInt(element.style.getPropertyValue("--rotation")),
         },
       );
@@ -203,8 +227,6 @@ function replaceMagnets(magnetArray: Magnet[]) {
 }
 
 webSocket.onopen = () => {
-  door = document.getElementById("door")!;
-
   let canvasX: number;
   let canvasY: number;
 
@@ -213,31 +235,40 @@ webSocket.onopen = () => {
   let clickOffsetX = 0;
   let clickOffsetY = 0;
 
+  let centerX = 0;
+  let centerY = 0;
+
   function updateCoordinatesFromHash() {
     const params = new URLSearchParams(globalThis.location.hash.slice(1));
-    const centerX = parseInt(params.get("x") ?? "0");
-    const centerY = parseInt(params.get("y") ?? "0");
+    centerX = parseInt(params.get("x") ?? "0");
+    centerY = parseInt(params.get("y") ?? "0");
 
-    canvasX = Math.floor(centerX - globalThis.innerWidth / 2);
-    canvasY = Math.floor(-centerY - globalThis.innerHeight / 2);
+    canvasX = Math.round(centerX - globalThis.innerWidth / 2);
+    canvasY = Math.round(-centerY - globalThis.innerHeight / 2);
 
     document.documentElement.style.setProperty("--canvas-x", `${canvasX}px`);
     document.documentElement.style.setProperty("--canvas-y", `${canvasY}px`);
 
     viewWindow = new Window(
-      Math.floor(canvasX - globalThis.innerWidth),
-      Math.floor(canvasY - globalThis.innerHeight),
-      Math.floor(canvasX + 2 * globalThis.innerWidth),
-      Math.floor(canvasY + 2 * globalThis.innerHeight),
+      Math.round(canvasX - globalThis.innerWidth),
+      Math.round(canvasY - globalThis.innerHeight),
+      Math.round(canvasX + 2 * globalThis.innerWidth),
+      Math.round(canvasY + 2 * globalThis.innerHeight),
     );
 
     webSocket.send(pack(viewWindow));
   }
 
-  globalThis.addEventListener("hashchange", updateCoordinatesFromHash);
+  if (!globalThis.location.hash) {
+    const randomX = Math.round(Math.random() * 10000);
+    const randomY = Math.round(Math.random() * 10000);
+    globalThis.location.hash = `x=${randomX}&y=${randomY}`;
+  }
 
   updateCoordinatesFromHash();
-  door.removeChild(document.getElementById("loader")!);
+  globalThis.addEventListener("hashchange", updateCoordinatesFromHash);
+
+  document.body.removeChild(document.getElementById("loader")!);
 
   function updateWindow() {
     document.documentElement.style.setProperty(
@@ -255,8 +286,8 @@ webSocket.onopen = () => {
     door.setPointerCapture(e.pointerId);
     isDraggingWindow = true;
 
-    clickOffsetX = Math.floor(canvasX + e.clientX);
-    clickOffsetY = Math.floor(canvasY + e.clientY);
+    clickOffsetX = canvasX + e.clientX;
+    clickOffsetY = canvasY + e.clientY;
   }, { passive: true });
 
   document.addEventListener("pointermove", (e) => {
@@ -273,8 +304,19 @@ webSocket.onopen = () => {
     door.releasePointerCapture(e.pointerId);
     isDraggingWindow = false;
 
-    const centerX = Math.floor(canvasX + globalThis.innerWidth / 2);
-    const centerY = -1 * Math.floor(canvasY + globalThis.innerHeight / 2);
-    globalThis.location.hash = `x=${centerX}&y=${centerY}`;
+    const newCenterX = canvasX + globalThis.innerWidth / 2;
+    const newCenterY = -(canvasY + globalThis.innerHeight / 2);
+
+    const xDiff = Math.abs(centerX - newCenterX);
+    const yDiff = Math.abs(centerY - newCenterY);
+    if (
+      xDiff >= 1.0 || yDiff >= 1.0
+    ) {
+      globalThis.location.hash = `x=${Math.round(newCenterX)}&y=${
+        Math.round(
+          newCenterY,
+        )
+      }`;
+    }
   }, { passive: true });
 };
