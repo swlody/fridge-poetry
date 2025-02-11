@@ -4,6 +4,7 @@
     "npm:@deno/vite-plugin@1": "1.0.3_vite@6.1.0",
     "npm:@types/node@*": "22.5.4",
     "npm:msgpackr@^1.11.2": "1.11.2",
+    "npm:prettier@*": "3.5.0",
     "npm:vite@*": "6.1.0_@types+node@22.5.4",
     "npm:vite@^6.0.1": "6.1.0_@types+node@22.5.4"
   },
@@ -246,6 +247,9 @@
         "picocolors",
         "source-map-js"
       ]
+    },
+    "prettier@3.5.0": {
+      "integrity": "sha512-quyMrVt6svPS7CjQ9gKb3GLEX/rl3BCL2oa/QkNcXv4YNVBC9olt3s+H7ukto06q7B1Qz46PbrKLO34PR6vXcA=="
     },
     "rollup@4.34.6": {
       "integrity": "sha512-wc2cBWqJgkU3Iz5oztRkQbfVkbxoz5EhnCGOrnJvnLnQ7O0WhQUYyv18qQI79O8L7DdHrrlJNeCHd4VGpnaXKQ==",

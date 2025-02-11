@@ -5,10 +5,6 @@ import deno from "@deno/vite-plugin";
 export default defineConfig({
   plugins: [deno()],
   server: {
-    allowedHosts: [
-      "localhost",
-      "laptop.fridgepoem.com",
-    ],
     cors: true,
     proxy: {
       "/api": {
