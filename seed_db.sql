@@ -14,3 +14,7 @@ SELECT
   NULL
 FROM words_array
 CROSS JOIN generate_series(1, 2000000);
+
+CREATE INDEX IF NOT EXISTS idx_magnets_coords ON magnets USING gist (coords);
+REINDEX INDEX CONCURRENTLY idx_magnets_coords;
+CLUSTER magnets USING idx_magnets_coords;

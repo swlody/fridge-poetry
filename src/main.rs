@@ -194,7 +194,6 @@ async fn run(config: Config) -> Result<()> {
     .with_graceful_shutdown(shutdown_signal())
     .await?;
 
-    // TODO gracefully close websockets too? Can pass token in state
     token.cancel();
     broadcast_changes_task.await?;
 

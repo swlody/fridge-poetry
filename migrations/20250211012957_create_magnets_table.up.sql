@@ -6,5 +6,3 @@ CREATE TABLE IF NOT EXISTS magnets (
     word TEXT NOT NULL,
     last_modifier UUID
 );
-CREATE INDEX idx_magnets_coords ON magnets USING gist (coords);
-CLUSTER magnets USING idx_magnets_coords;
