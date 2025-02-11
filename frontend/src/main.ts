@@ -24,6 +24,10 @@ class Window {
   contains(x: number, y: number): boolean {
     return x >= this.x1 && x <= this.x2 && y >= this.y1 && y <= this.y2;
   }
+
+  pack() {
+    return pack([this.x1, this.y1, this.x2, this.y2]);
+  }
 }
 
 const door = document.getElementById("door")!;
@@ -170,7 +174,7 @@ webSocket.onopen = () => {
       Math.round(canvasY + 2 * globalThis.innerHeight),
     );
 
-    webSocket.send(pack(viewWindow));
+    webSocket.send(viewWindow.pack());
   }
 
   if (!globalThis.location.hash) {

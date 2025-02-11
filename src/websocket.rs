@@ -114,6 +114,7 @@ impl Window {
             points.push(points.last().unwrap().clone());
         }
 
+        // TODO reduce polygon to box if motion is purely lateral
         // Create the polygon with exactly 6 points
         Some(Shape::Polygon(Polygon {
             p1: points[0].clone(),
@@ -156,12 +157,14 @@ enum MagnetUpdate {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct ClientMagnetUpdate {
+    is_magnet_update: bool,
     id: i32,
     x: i32,
     y: i32,
     rotation: i32,
 }
 
+// TODO err how are these distinguished? oh well...
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum ClientUpdate {
