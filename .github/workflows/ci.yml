@@ -42,7 +42,7 @@ jobs:
 
       - name: Check formatting
         working-directory: ./frontend
-        run: deno run -A npm:prettier **/*.{ts,html,css}
+        run: deno run -A npm:prettier --check **/*.{ts,html,css}
 
       # - name: Run tests
       #   run: deno test --parallel tests/
