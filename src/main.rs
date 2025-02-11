@@ -7,7 +7,7 @@ use std::{net::SocketAddr, str::FromStr as _};
 use anyhow::Result;
 use axum::{
     extract::{State, WebSocketUpgrade},
-    http::{HeaderValue, Method, StatusCode},
+    http::{HeaderMap, HeaderValue, Method, StatusCode},
     response::IntoResponse,
     routing::get,
     Router,
@@ -29,6 +29,7 @@ use tower_http::{
 };
 use tracing::Level;
 use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
+use uuid::Uuid;
 
 use crate::{
     middleware::{MakeRequestUuidV7, SentryReportRequestInfoLayer},
@@ -212,8 +213,17 @@ async fn run(config: Config) -> Result<()> {
 }
 
 #[tracing::instrument]
-async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| websocket::handle_socket(socket, state))
+async fn ws_handler(
+    headers: HeaderMap,
+    ws: WebSocketUpgrade,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    let session_id = headers["x-request-id"]
+        .to_str()
+        .ok()
+        .and_then(|s| Uuid::parse_str(s).ok())
+        .ok_or(StatusCode::BAD_REQUEST)?;
+    Ok(ws.on_upgrade(move |socket| websocket::handle_socket(socket, session_id, state)))
 }
 
 #[tracing::instrument]
