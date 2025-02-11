@@ -28,7 +28,7 @@ class Window {
     this.y2 = y2;
   }
 
-  constains(x: number, y: number): boolean {
+  contains(x: number, y: number): boolean {
     return x >= this.x1 && x <= this.x2 && y >= this.y1 && y <= this.y2;
   }
 }
@@ -146,18 +146,10 @@ function hideRotationDot(element: HTMLElement) {
 
 // Add new elements to DOM, remove old elements
 function replaceMagnets(magnetArray: Magnet[]) {
-  // Keep track of which IDs are missing from the update for later deletion
-  const missingMagnetIds = new Set();
-  door.querySelectorAll(".magnet").forEach((element) => {
-    missingMagnetIds.add(element.id);
-  });
-
   const newElements = new DocumentFragment();
   for (const magnet of magnetArray) {
     const element = document.getElementById(`${magnet.id}`);
     if (element) {
-      missingMagnetIds.delete(String(magnet.id));
-
       element.style.setProperty("--local-x", `${magnet.x}px`);
       element.style.setProperty("--local-y", `${magnet.y}px`);
       element.style.setProperty("--rotation", `${magnet.rotation}deg`);
@@ -167,10 +159,17 @@ function replaceMagnets(magnetArray: Magnet[]) {
     }
   }
 
-  // Remove all magnets not present in update
-  for (const id of missingMagnetIds) {
-    door.removeChild(document.getElementById(`${id}`)!);
-  }
+  door.querySelectorAll(".magnet").forEach((element) => {
+    const magnet = element as HTMLElement;
+    if (
+      !viewWindow.contains(
+        parseInt(magnet.style.getPropertyValue("--local-x")),
+        parseInt(magnet.style.getPropertyValue("--local-y")),
+      )
+    ) {
+      door.removeChild(magnet);
+    }
+  });
 
   // Add listeners to new elements
   newElements.querySelectorAll(".magnet").forEach((magnet) => {
