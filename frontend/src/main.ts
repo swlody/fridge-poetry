@@ -1,17 +1,10 @@
 import { pack, unpack } from "msgpackr";
 
+import { clickedElement, hideRotationDot, Magnet } from "./magnet.ts";
+
 import "./style.css";
 
 const WS_URL = import.meta.env.VITE_WS_BASE_URL || "ws";
-
-interface Magnet {
-  id: number;
-  x: number;
-  y: number;
-  rotation: number;
-  zIndex: number;
-  word: string;
-}
 
 // Window that represents the total area of magnets in the DOM
 // This is a 3x3 grid of [viewport area] centered at the actual viewport
@@ -34,19 +27,6 @@ class Window {
 }
 
 const door = document.getElementById("door")!;
-function createMagnet(magnet: Magnet): HTMLElement {
-  const element = document.createElement("div");
-  element.className = "magnet";
-  element.id = String(magnet.id);
-  element.style.setProperty("--local-x", `${magnet.x}px`);
-  element.style.setProperty("--local-y", `${magnet.y}px`);
-  element.style.setProperty("--rotation", `${magnet.rotation}deg`);
-  element.style.zIndex = String(magnet.zIndex);
-  element.innerHTML = `<div hidden class="dot rotate">
-    </div><div hidden class="rotate-link"></div>
-    ${magnet.word}`;
-  return element;
-}
 
 const dialog = document.getElementById("about-dialog")! as HTMLElement;
 document.getElementById("about-button")!.addEventListener(
@@ -67,9 +47,11 @@ webSocket.onerror = (err) => {
 };
 
 webSocket.onclose = () => {
-  setTimeout(() => {
-    webSocket = new WebSocket(WS_URL);
-  }, 1000);
+  while (!webSocket.OPEN) {
+    setTimeout(() => {
+      webSocket = new WebSocket(WS_URL);
+    }, 1000);
+  }
 };
 
 // TODO consider race conditions between this and mouseup replaceMagnets
@@ -82,27 +64,22 @@ webSocket.onmessage = async (e) => {
   if (update[0] instanceof Array) {
     const magnets = [];
     for (const val of update) {
-      magnets.push({
-        id: val[0],
-        x: val[1],
-        y: val[2],
-        rotation: val[3],
-        zIndex: val[4],
-        word: val[5],
-      });
+      magnets.push(
+        new Magnet(val[0], val[1], val[2], val[3], val[4], val[5]),
+      );
     }
     replaceMagnets(magnets);
   } else if (update[5] !== undefined) {
     // New object arriving from out of bounds, create it
     door.append(
-      createMagnet({
-        id: update[0],
-        x: update[1],
-        y: update[2],
-        rotation: update[3],
-        zIndex: update[4],
-        word: update[5],
-      }),
+      new Magnet(
+        update[0],
+        update[1],
+        update[2],
+        update[3],
+        update[4],
+        update[5],
+      ).toElement(webSocket),
     );
   } else if (update[4] !== undefined) {
     // Received update for magnet within our window
@@ -122,27 +99,7 @@ webSocket.onmessage = async (e) => {
 
 let viewWindow: Window;
 
-let clickedElement: HTMLElement | null = null;
-let rotating = false;
 const rotateCursor = document.getElementById("rotate-cursor")!;
-
-function showRotationDot(element: HTMLElement) {
-  for (const child of element.children) {
-    const div = child as HTMLDivElement;
-    div.hidden = false;
-  }
-
-  clickedElement = element;
-}
-
-function hideRotationDot(element: HTMLElement) {
-  for (const child of element.children) {
-    const div = child as HTMLDivElement;
-    div.hidden = true;
-  }
-
-  clickedElement = null;
-}
 
 // Add new elements to DOM, remove old elements
 function replaceMagnets(magnetArray: Magnet[]) {
@@ -155,7 +112,7 @@ function replaceMagnets(magnetArray: Magnet[]) {
       element.style.setProperty("--rotation", `${magnet.rotation}deg`);
       element.style.zIndex = magnet.zIndex.toString();
     } else {
-      newElements.append(createMagnet(magnet));
+      newElements.append(magnet.toElement(webSocket));
     }
   }
 
@@ -169,149 +126,6 @@ function replaceMagnets(magnetArray: Magnet[]) {
     ) {
       door.removeChild(magnet);
     }
-  });
-
-  // Add listeners to new elements
-  newElements.querySelectorAll(".magnet").forEach((magnet) => {
-    const element = magnet as HTMLElement;
-
-    let clickOffsetX = 0;
-    let clickOffsetY = 0;
-
-    let originalX = 0;
-    let originalY = 0;
-
-    let newX = 0;
-    let newY = 0;
-
-    let isDragging = false;
-    let hasChanged = false;
-
-    let initialRotation = 0;
-    let initialAngle = 0;
-
-    function getAngle(element: HTMLElement, clientX: number, clientY: number) {
-      const rect = element.getBoundingClientRect();
-      const centerX = rect.left + rect.width / 2;
-      const centerY = rect.top + rect.height / 2;
-
-      // Calculate angle in radians, then convert to degrees
-      return Math.atan2(clientY - centerY, clientX - centerX) * (180 / Math.PI);
-    }
-
-    element.addEventListener(
-      "pointerdown",
-      (e) => {
-        if (e.button !== 0) return;
-
-        element.setPointerCapture(e.pointerId);
-
-        if (clickedElement && e.target === element.firstElementChild) {
-          rotating = true;
-          initialRotation =
-            parseInt(element.style.getPropertyValue("--rotation")) || 0;
-          initialAngle = getAngle(element, e.clientX, e.clientY);
-        } else {
-          isDragging = true;
-          hasChanged = false;
-
-          element.style.zIndex = "2147483647";
-
-          clickOffsetX = e.clientX - element.offsetLeft;
-          clickOffsetY = e.clientY - element.offsetTop;
-
-          originalX = parseInt(element.style.getPropertyValue("--local-x"));
-          originalY = parseInt(element.style.getPropertyValue("--local-y"));
-        }
-      },
-      { passive: true },
-    );
-
-    element.addEventListener(
-      "pointermove",
-      (e) => {
-        if (isDragging) {
-          if (clickedElement) {
-            hideRotationDot(clickedElement);
-          }
-
-          hasChanged = true;
-
-          newX = originalX + e.clientX - clickOffsetX;
-          newY = originalY + e.clientY - clickOffsetY;
-
-          requestAnimationFrame(() => {
-            element.style.setProperty("--local-x", `${Math.round(newX)}px`);
-            element.style.setProperty("--local-y", `${Math.round(newY)}px`);
-          });
-        } else if (rotating) {
-          const currentAngle = getAngle(element, e.clientX, e.clientY);
-          const angleDiff = currentAngle - initialAngle;
-          const newRotation = (initialRotation + angleDiff) % 360;
-
-          hasChanged = true;
-
-          requestAnimationFrame(() => {
-            element.style.setProperty(
-              "--rotation",
-              `${Math.round(newRotation)}deg`,
-            );
-            // Update cursor rotation
-            if (!rotateCursor.hidden) {
-              rotateCursor.style.transform = `translate3d(${e.clientX - 8}px, ${
-                e.clientY - 8
-              }px, 0) rotate(${Math.round(newRotation) - 45}deg)`;
-            }
-          });
-        }
-      },
-      { passive: true },
-    );
-
-    element.addEventListener(
-      "pointerup",
-      (e) => {
-        if (isDragging) {
-          element.releasePointerCapture(e.pointerId);
-
-          isDragging = false;
-
-          if (
-            !hasChanged ||
-            (Math.abs(newX - originalX) < 0.5 &&
-              Math.abs(newY - originalY) < 0.5)
-          ) {
-            if (!clickedElement) {
-              showRotationDot(element);
-            } else {
-              hideRotationDot(element);
-            }
-          } else {
-            const magnetUpdate = pack({
-              id: parseInt(element.id),
-              x: Math.round(newX),
-              y: Math.round(newY),
-              rotation: parseInt(element.style.getPropertyValue("--rotation")),
-            });
-            webSocket.send(magnetUpdate);
-          }
-        } else if (rotating) {
-          element.releasePointerCapture(e.pointerId);
-
-          rotating = false;
-
-          const magnetUpdate = pack({
-            id: parseInt(element.id),
-            x: parseInt(element.style.getPropertyValue("--local-x")),
-            y: parseInt(element.style.getPropertyValue("--local-y")),
-            rotation: parseInt(element.style.getPropertyValue("--rotation")),
-          });
-
-          webSocket.send(magnetUpdate);
-        }
-      },
-      { passive: true },
-    );
   });
 
   door.append(newElements);
@@ -370,11 +184,6 @@ webSocket.onopen = () => {
 
   document.body.removeChild(document.getElementById("loader")!);
 
-  function updateWindow() {
-    document.documentElement.style.setProperty("--canvas-x", `${canvasX}px`);
-    document.documentElement.style.setProperty("--canvas-y", `${canvasY}px`);
-  }
-
   document.addEventListener(
     "pointerdown",
     (e) => {
@@ -425,7 +234,16 @@ webSocket.onopen = () => {
         canvasX = Math.floor(clickOffsetX - e.clientX);
         canvasY = Math.floor(clickOffsetY - e.clientY);
 
-        requestAnimationFrame(updateWindow);
+        requestAnimationFrame(() => {
+          document.documentElement.style.setProperty(
+            "--canvas-x",
+            `${canvasX}px`,
+          );
+          document.documentElement.style.setProperty(
+            "--canvas-y",
+            `${canvasY}px`,
+          );
+        });
       }
     },
     { passive: true },
@@ -443,6 +261,7 @@ webSocket.onopen = () => {
 
       const xDiff = Math.abs(centerX - newCenterX);
       const yDiff = Math.abs(centerY - newCenterY);
+
       if (xDiff >= 1.0 || yDiff >= 1.0) {
         globalThis.location.replace(
           `#x=${Math.round(newCenterX)}&y=${Math.round(newCenterY)}`,
