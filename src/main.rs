@@ -1,5 +1,3 @@
-mod api;
-mod error;
 mod middleware;
 mod state;
 mod websocket;
@@ -8,7 +6,10 @@ use std::{net::SocketAddr, str::FromStr as _};
 
 use anyhow::Result;
 use axum::{
-    http::{HeaderValue, Method},
+    extract::{State, WebSocketUpgrade},
+    http::{HeaderValue, Method, StatusCode},
+    response::IntoResponse,
+    routing::get,
     Router,
 };
 use mimalloc::MiMalloc;
@@ -16,6 +17,7 @@ use secrecy::{ExposeSecret as _, SecretString};
 use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
 use serde::Deserialize;
 use sqlx::postgres::PgListener;
+use thiserror::Error;
 use tokio::{net::TcpListener, select, signal, sync::broadcast};
 use tokio_util::sync::CancellationToken;
 use tower::ServiceBuilder;
@@ -51,6 +53,15 @@ pub struct Config {
 
     pub sentry_dsn: Option<SecretString>,
     pub database_url: SecretString,
+}
+
+#[derive(Error, Debug)]
+pub enum FridgeError {
+    #[error(transparent)]
+    Sqlx(#[from] sqlx::Error),
+
+    #[error(transparent)]
+    Axum(#[from] axum::Error),
 }
 
 fn main() -> Result<()> {
@@ -180,8 +191,8 @@ async fn run(config: Config) -> Result<()> {
     };
 
     let app = Router::new()
-        .merge(api::routes())
-        .nest("/ws", websocket::routes())
+        .route("/health", get(health_check))
+        .route("/ws", get(ws_handler))
         .layer(service_builder)
         .with_state(app_state);
 
@@ -198,6 +209,20 @@ async fn run(config: Config) -> Result<()> {
     broadcast_changes_task.await?;
 
     Ok(())
+}
+
+#[tracing::instrument]
+async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| websocket::handle_socket(socket, state))
+}
+
+#[tracing::instrument]
+async fn health_check(State(state): State<AppState>) -> impl IntoResponse {
+    if state.postgres.is_closed() {
+        StatusCode::INTERNAL_SERVER_ERROR
+    } else {
+        StatusCode::OK
+    }
 }
 
 async fn shutdown_signal() {

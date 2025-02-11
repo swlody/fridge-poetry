@@ -1,18 +1,10 @@
-use axum::{
-    extract::{
-        ws::{Message, WebSocket},
-        State, WebSocketUpgrade,
-    },
-    response::IntoResponse,
-    routing::get,
-    Router,
-};
+use axum::extract::ws::{Message, WebSocket};
 use serde::{Deserialize, Serialize};
 use tokio::select;
 
 use crate::{
-    error::FridgeError,
     state::{AppState, PgMagnetUpdate},
+    FridgeError,
 };
 
 #[derive(Clone, Debug)]
@@ -293,12 +285,7 @@ async fn update_magnet(update: ClientMagnetUpdate, state: &AppState) -> Result<(
     Ok(())
 }
 
-#[tracing::instrument]
-async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_socket(socket, state))
-}
-
-async fn handle_socket(mut socket: WebSocket, state: AppState) {
+pub async fn handle_socket(mut socket: WebSocket, state: AppState) {
     let mut rx = state.magnet_updates.subscribe();
     let mut client_window = Window::default();
 
@@ -378,8 +365,4 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
             }
         }
     }
-}
-
-pub fn routes() -> Router<AppState> {
-    Router::new().route("/", get(ws_handler))
 }
