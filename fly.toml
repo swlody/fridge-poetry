@@ -24,7 +24,7 @@ grace_period = "5s"
 interval = "1m"
 method = "GET"
 timeout = "1s"
-path = "/api/health"
+path = "/health"
 
 [deploy]
 strategy = "canary"
