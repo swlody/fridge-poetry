@@ -62,6 +62,21 @@ export function hideRotationDot(element: HTMLElement) {
   clickedElement = null;
 }
 
+function packedMagnetUpdate(
+  id: number,
+  x: number,
+  y: number,
+  rotation: number,
+) {
+  return pack([
+    true,
+    id,
+    x,
+    y,
+    rotation,
+  ]);
+}
+
 function setupEventListeners(
   element: HTMLElement,
   webSocket: WebSocket,
@@ -173,12 +188,12 @@ function setupEventListeners(
             hideRotationDot(element);
           }
         } else {
-          const magnetUpdate = pack({
-            id: parseInt(element.id),
-            x: Math.round(newX),
-            y: Math.round(newY),
-            rotation: parseInt(element.style.getPropertyValue("--rotation")),
-          });
+          const magnetUpdate = packedMagnetUpdate(
+            parseInt(element.id),
+            Math.round(newX),
+            Math.round(newY),
+            parseInt(element.style.getPropertyValue("--rotation")),
+          );
           webSocket.send(magnetUpdate);
         }
       } else if (rotating) {
@@ -186,12 +201,12 @@ function setupEventListeners(
 
         rotating = false;
 
-        const magnetUpdate = pack({
-          id: parseInt(element.id),
-          x: parseInt(element.style.getPropertyValue("--local-x")),
-          y: parseInt(element.style.getPropertyValue("--local-y")),
-          rotation: parseInt(element.style.getPropertyValue("--rotation")),
-        });
+        const magnetUpdate = packedMagnetUpdate(
+          parseInt(element.id),
+          parseInt(element.style.getPropertyValue("--local-x")),
+          parseInt(element.style.getPropertyValue("--local-y")),
+          parseInt(element.style.getPropertyValue("--rotation")),
+        );
 
         webSocket.send(magnetUpdate);
       }
