@@ -1,6 +1,7 @@
 use axum::extract::ws::{Message, WebSocket};
 use serde::{Deserialize, Serialize};
 use tokio::select;
+use uuid::Uuid;
 
 use crate::{
     state::{AppState, PgMagnetUpdate},
@@ -285,7 +286,7 @@ async fn update_magnet(update: ClientMagnetUpdate, state: &AppState) -> Result<(
     Ok(())
 }
 
-pub async fn handle_socket(mut socket: WebSocket, state: AppState) {
+pub async fn handle_socket(mut socket: WebSocket, _session_id: Uuid, state: AppState) {
     let mut rx = state.magnet_updates.subscribe();
     let mut client_window = Window::default();
 
