@@ -15,6 +15,28 @@ use crate::{
     state::{AppState, PgMagnetUpdate},
 };
 
+#[derive(Clone, Debug)]
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+#[derive(Debug)]
+struct Polygon {
+    p1: Point,
+    p2: Point,
+    p3: Point,
+    p4: Point,
+    p5: Point,
+    p6: Point,
+}
+
+#[derive(Debug)]
+enum Shape {
+    Window(Window),
+    Polygon(Polygon),
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 struct Window {
     x1: i32,
@@ -26,6 +48,88 @@ struct Window {
 impl Window {
     const fn contains(&self, x: i32, y: i32) -> bool {
         x >= self.x1 && x <= self.x2 && y >= self.y1 && y <= self.y2
+    }
+
+    fn difference(&self, other: &Window) -> Option<Shape> {
+        // Check if there's no intersection
+        if self.x2 <= other.x1 || other.x2 <= self.x1 || self.y2 <= other.y1 || other.y2 <= self.y1
+        {
+            // Return other as a Shape::Window since there's no intersection
+            return Some(Shape::Window(other.clone()));
+        }
+
+        // Check if other is completely contained within self
+        if self.x1 <= other.x1 && other.x2 <= self.x2 && self.y1 <= other.y1 && other.y2 <= self.y2
+        {
+            return None;
+        }
+
+        // Collect points for the resulting polygon
+        let mut points = Vec::new();
+
+        // Helper function to add points only if they're not in self
+        let mut add_point = |x: i32, y: i32| {
+            if !self.contains(x, y) {
+                points.push(Point { x, y });
+            }
+        };
+
+        // Add all corner points of other
+        add_point(other.x1, other.y1); // Top-left
+        add_point(other.x2, other.y1); // Top-right
+        add_point(other.x2, other.y2); // Bottom-right
+        add_point(other.x1, other.y2); // Bottom-left
+
+        // Add intersection points if they exist
+        if self.y1 > other.y1 && other.x1 < self.x1 && self.x1 < other.x2 {
+            points.push(Point {
+                x: self.x1,
+                y: self.y1,
+            });
+        }
+        if self.y1 > other.y1 && other.x1 < self.x2 && self.x2 < other.x2 {
+            points.push(Point {
+                x: self.x2,
+                y: self.y1,
+            });
+        }
+        if self.y2 < other.y2 && other.x1 < self.x1 && self.x1 < other.x2 {
+            points.push(Point {
+                x: self.x1,
+                y: self.y2,
+            });
+        }
+        if self.y2 < other.y2 && other.x1 < self.x2 && self.x2 < other.x2 {
+            points.push(Point {
+                x: self.x2,
+                y: self.y2,
+            });
+        }
+
+        // Sort points clockwise
+        let center_x = points.iter().map(|p| p.x).sum::<i32>() / points.len() as i32;
+        let center_y = points.iter().map(|p| p.y).sum::<i32>() / points.len() as i32;
+
+        points.sort_by(|a, b| {
+            let angle_a = (-((a.y - center_y) as f64).atan2((a.x - center_x) as f64)) as f64;
+            let angle_b = (-((b.y - center_y) as f64).atan2((b.x - center_x) as f64)) as f64;
+            angle_a.partial_cmp(&angle_b).unwrap()
+        });
+
+        // Ensure we have exactly 6 points (pad with the last point if necessary)
+        while points.len() < 6 {
+            points.push(points.last().unwrap().clone());
+        }
+
+        // Create the polygon with exactly 6 points
+        Some(Shape::Polygon(Polygon {
+            p1: points[0].clone(),
+            p2: points[1].clone(),
+            p3: points[2].clone(),
+            p4: points[3].clone(),
+            p5: points[4].clone(),
+            p6: points[5].clone(),
+        }))
     }
 }
 
@@ -119,21 +223,52 @@ async fn send_relevant_update(
 #[tracing::instrument]
 async fn send_new_magnets(
     socket: &mut WebSocket,
-    window: &Window,
+    shape: &Shape,
     state: &AppState,
 ) -> Result<(), FridgeError> {
-    let magnets = sqlx::query_as!(
-        Magnet,
-        r#"SELECT id, coords[0]::int AS "x!", coords[1]::int AS "y!", rotation, word, z_index
-           FROM magnets
-           WHERE coords <@ Box(Point($1::int, $2::int), Point($3::int, $4::int))"#,
-        window.x1,
-        window.y1,
-        window.x2,
-        window.y2
-    )
-    .fetch_all(&state.postgres)
-    .await?;
+    let magnets = match shape {
+        Shape::Window(window) => sqlx::query_as!(
+            Magnet,
+            r#"SELECT id, coords[0]::int AS "x!", coords[1]::int AS "y!", rotation, word, z_index
+                FROM magnets
+                WHERE coords <@ Box(Point($1::int, $2::int), Point($3::int, $4::int))"#,
+            window.x1,
+            window.y1,
+            window.x2,
+            window.y2
+        )
+        .fetch_all(&state.postgres)
+        .await?,
+
+        // what the fuck
+        Shape::Polygon(polygon) => sqlx::query_as!(
+            Magnet,
+            r#"SELECT id, coords[0]::int AS "x!", coords[1]::int AS "y!", rotation, word, z_index
+                FROM magnets
+                WHERE coords <@ ('(' ||
+            '(' || $1::int || ',' || $2::int || '),' ||
+            '(' || $3::int || ',' || $4::int || '),' ||
+            '(' || $5::int || ',' || $6::int || '),' ||
+            '(' || $7::int || ',' || $8::int || '),' ||
+            '(' || $9::int || ',' || $10::int || '),' ||
+            '(' || $11::int || ',' || $12::int || ')' ||
+            ')')::polygon"#,
+            polygon.p1.x,
+            polygon.p1.y,
+            polygon.p2.x,
+            polygon.p2.y,
+            polygon.p3.x,
+            polygon.p3.y,
+            polygon.p4.x,
+            polygon.p4.y,
+            polygon.p5.x,
+            polygon.p5.y,
+            polygon.p6.x,
+            polygon.p6.y
+        )
+        .fetch_all(&state.postgres)
+        .await?,
+    };
 
     let buf = rmp_serde::to_vec(&MagnetUpdate::CanvasUpdate(magnets)).unwrap();
     socket.send(buf.into()).await?;
@@ -194,15 +329,19 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                         if let Ok(client_update) = rmp_serde::from_slice(&bytes) {
                             match client_update {
                                 ClientUpdate::Window(window_update) => {
+                                    let difference = client_window.difference(&window_update);
                                     client_window = window_update;
-                                    match send_new_magnets(&mut socket, &client_window, &state).await {
-                                        Ok(()) => {},
-                                        Err(FridgeError::Axum(e)) => {
-                                            tracing::debug!("Unable to send new magnets, disconnecting websocket: {e}");
-                                            break;
-                                        }
-                                        Err(FridgeError::Sqlx(e)) => {
-                                            tracing::error!("Unable to get magnets from database: {e}");
+
+                                    if let Some(difference) = difference {
+                                        match send_new_magnets(&mut socket, &difference, &state).await {
+                                            Ok(()) => {},
+                                            Err(FridgeError::Axum(e)) => {
+                                                tracing::debug!("Unable to send new magnets, disconnecting websocket: {e}");
+                                                break;
+                                            }
+                                            Err(FridgeError::Sqlx(e)) => {
+                                                tracing::error!("Unable to get magnets from database: {e}");
+                                            }
                                         }
                                     }
                                 }
