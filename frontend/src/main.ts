@@ -69,7 +69,7 @@ webSocket.onerror = (err) => {
 webSocket.onclose = () => {
   setTimeout(() => {
     webSocket = new WebSocket(WS_URL);
-  });
+  }, 1000);
 };
 
 // TODO consider race conditions between this and mouseup replaceMagnets
