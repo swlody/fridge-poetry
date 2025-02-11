@@ -19,15 +19,15 @@ auto_start_machines = true
 min_machines_running = 0
 processes = ['app']
 
-# [[http_service.checks]]
-# grace_period = "5s"
-# interval = "1m"
-# method = "GET"
-# timeout = "1s"
-# path = "/api/health"
+[[http_service.checks]]
+grace_period = "5s"
+interval = "1m"
+method = "GET"
+timeout = "1s"
+path = "/api/health"
 
-# [deploy]
-# strategy = "canary"
+[deploy]
+strategy = "canary"
 
 [[vm]]
 size = 'shared-cpu-1x'

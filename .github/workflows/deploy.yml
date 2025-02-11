@@ -1,5 +1,3 @@
-# See https://fly.io/docs/app-guides/continuous-deployment-with-github-actions/
-
 name: Deploy System
 on:
   push:
@@ -57,14 +55,6 @@ jobs:
       - name: Setup flyctl
         uses: superfly/flyctl-actions/setup-flyctl@master
 
-      - name: Install SQLx CLI
-        run: cargo install sqlx-cli --no-default-features --features postgres
-
-      - name: Run migrations
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: sqlx migrate run
-
       - name: Build and deploy Docker container
         run: flyctl deploy --remote-only
         env:
@@ -78,9 +68,3 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: rollback
-
-      - name: Rollback migrations if failed
-        if: failure()
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: sqlx migrate revert
