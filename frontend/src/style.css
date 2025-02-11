@@ -108,7 +108,6 @@ footer {
   margin: 10px;
 }
 
-/* TODO nicer/different loader */
 .loader {
   border: 12px solid lightgray; /* Light grey */
   border-top: 12px solid plum; /* Blue */
