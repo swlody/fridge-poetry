@@ -29,12 +29,7 @@ class Window {
   }
 
   constains(x: number, y: number): boolean {
-    return (
-      x >= this.x1 &&
-      x <= this.x2 &&
-      y >= this.y1 &&
-      y <= this.y2
-    );
+    return x >= this.x1 && x <= this.x2 && y >= this.y1 && y <= this.y2;
   }
 }
 
@@ -99,14 +94,16 @@ webSocket.onmessage = async (e) => {
     replaceMagnets(magnets);
   } else if (update[5] !== undefined) {
     // New object arriving from out of bounds, create it
-    door.append(createMagnet({
-      id: update[0],
-      x: update[1],
-      y: update[2],
-      rotation: update[3],
-      zIndex: update[4],
-      word: update[5],
-    }));
+    door.append(
+      createMagnet({
+        id: update[0],
+        x: update[1],
+        y: update[2],
+        rotation: update[3],
+        zIndex: update[4],
+        word: update[5],
+      }),
+    );
   } else if (update[4] !== undefined) {
     // Received update for magnet within our window
     const element = document.getElementById(`${update[0]}`)!;
@@ -203,110 +200,119 @@ function replaceMagnets(magnetArray: Magnet[]) {
       return Math.atan2(clientY - centerY, clientX - centerX) * (180 / Math.PI);
     }
 
-    element.addEventListener("pointerdown", (e) => {
-      if (e.button !== 0) return;
+    element.addEventListener(
+      "pointerdown",
+      (e) => {
+        if (e.button !== 0) return;
 
-      element.setPointerCapture(e.pointerId);
+        element.setPointerCapture(e.pointerId);
 
-      if (clickedElement && e.target === element.firstElementChild) {
-        rotating = true;
-        initialRotation =
-          parseInt(element.style.getPropertyValue("--rotation")) || 0;
-        initialAngle = getAngle(element, e.clientX, e.clientY);
-      } else {
-        isDragging = true;
-        hasChanged = false;
-
-        element.style.zIndex = "2147483647";
-
-        clickOffsetX = e.clientX - element.offsetLeft;
-        clickOffsetY = e.clientY - element.offsetTop;
-
-        originalX = parseInt(element.style.getPropertyValue("--local-x"));
-        originalY = parseInt(element.style.getPropertyValue("--local-y"));
-      }
-    }, { passive: true });
-
-    element.addEventListener("pointermove", (e) => {
-      if (isDragging) {
-        if (clickedElement) {
-          hideRotationDot(clickedElement);
-        }
-
-        hasChanged = true;
-
-        newX = originalX + e.clientX - clickOffsetX;
-        newY = originalY + e.clientY - clickOffsetY;
-
-        requestAnimationFrame(() => {
-          element.style.setProperty("--local-x", `${Math.round(newX)}px`);
-          element.style.setProperty("--local-y", `${Math.round(newY)}px`);
-        });
-      } else if (rotating) {
-        const currentAngle = getAngle(element, e.clientX, e.clientY);
-        const angleDiff = currentAngle - initialAngle;
-        const newRotation = (initialRotation + angleDiff) % 360;
-
-        hasChanged = true;
-
-        requestAnimationFrame(() => {
-          element.style.setProperty(
-            "--rotation",
-            `${Math.round(newRotation)}deg`,
-          );
-          // Update cursor rotation
-          if (!rotateCursor.hidden) {
-            rotateCursor.style.transform = `translate3d(${e.clientX - 8}px, ${
-              e.clientY - 8
-            }px, 0) rotate(${Math.round(newRotation) - 45}deg)`;
-          }
-        });
-      }
-    }, { passive: true });
-
-    element.addEventListener("pointerup", (e) => {
-      if (isDragging) {
-        element.releasePointerCapture(e.pointerId);
-
-        isDragging = false;
-
-        if (
-          !hasChanged ||
-          (Math.abs(newX - originalX) < 0.5 && Math.abs(newY - originalY) < 0.5)
-        ) {
-          if (!clickedElement) {
-            showRotationDot(element);
-          } else {
-            hideRotationDot(element);
-          }
+        if (clickedElement && e.target === element.firstElementChild) {
+          rotating = true;
+          initialRotation =
+            parseInt(element.style.getPropertyValue("--rotation")) || 0;
+          initialAngle = getAngle(element, e.clientX, e.clientY);
         } else {
-          const magnetUpdate = pack(
-            {
+          isDragging = true;
+          hasChanged = false;
+
+          element.style.zIndex = "2147483647";
+
+          clickOffsetX = e.clientX - element.offsetLeft;
+          clickOffsetY = e.clientY - element.offsetTop;
+
+          originalX = parseInt(element.style.getPropertyValue("--local-x"));
+          originalY = parseInt(element.style.getPropertyValue("--local-y"));
+        }
+      },
+      { passive: true },
+    );
+
+    element.addEventListener(
+      "pointermove",
+      (e) => {
+        if (isDragging) {
+          if (clickedElement) {
+            hideRotationDot(clickedElement);
+          }
+
+          hasChanged = true;
+
+          newX = originalX + e.clientX - clickOffsetX;
+          newY = originalY + e.clientY - clickOffsetY;
+
+          requestAnimationFrame(() => {
+            element.style.setProperty("--local-x", `${Math.round(newX)}px`);
+            element.style.setProperty("--local-y", `${Math.round(newY)}px`);
+          });
+        } else if (rotating) {
+          const currentAngle = getAngle(element, e.clientX, e.clientY);
+          const angleDiff = currentAngle - initialAngle;
+          const newRotation = (initialRotation + angleDiff) % 360;
+
+          hasChanged = true;
+
+          requestAnimationFrame(() => {
+            element.style.setProperty(
+              "--rotation",
+              `${Math.round(newRotation)}deg`,
+            );
+            // Update cursor rotation
+            if (!rotateCursor.hidden) {
+              rotateCursor.style.transform = `translate3d(${e.clientX - 8}px, ${
+                e.clientY - 8
+              }px, 0) rotate(${Math.round(newRotation) - 45}deg)`;
+            }
+          });
+        }
+      },
+      { passive: true },
+    );
+
+    element.addEventListener(
+      "pointerup",
+      (e) => {
+        if (isDragging) {
+          element.releasePointerCapture(e.pointerId);
+
+          isDragging = false;
+
+          if (
+            !hasChanged ||
+            (Math.abs(newX - originalX) < 0.5 &&
+              Math.abs(newY - originalY) < 0.5)
+          ) {
+            if (!clickedElement) {
+              showRotationDot(element);
+            } else {
+              hideRotationDot(element);
+            }
+          } else {
+            const magnetUpdate = pack({
               id: parseInt(element.id),
               x: Math.round(newX),
               y: Math.round(newY),
               rotation: parseInt(element.style.getPropertyValue("--rotation")),
-            },
-          );
-          webSocket.send(magnetUpdate);
-        }
-      } else if (rotating) {
-        element.releasePointerCapture(e.pointerId);
+            });
+            webSocket.send(magnetUpdate);
+          }
+        } else if (rotating) {
+          element.releasePointerCapture(e.pointerId);
 
-        rotating = false;
+          rotating = false;
 
-        const magnetUpdate = pack(
-          {
+          const magnetUpdate = pack({
             id: parseInt(element.id),
             x: parseInt(element.style.getPropertyValue("--local-x")),
             y: parseInt(element.style.getPropertyValue("--local-y")),
             rotation: parseInt(element.style.getPropertyValue("--rotation")),
-          },
-        );
+          });
 
-        webSocket.send(magnetUpdate);
-      }
-    }, { passive: true });
+          webSocket.send(magnetUpdate);
+        }
+      },
+      { passive: true },
+    );
   });
 
   door.append(newElements);
@@ -366,84 +372,84 @@ webSocket.onopen = () => {
   document.body.removeChild(document.getElementById("loader")!);
 
   function updateWindow() {
-    document.documentElement.style.setProperty(
-      "--canvas-x",
-      `${canvasX}px`,
-    );
-    document.documentElement.style.setProperty(
-      "--canvas-y",
-      `${canvasY}px`,
-    );
+    document.documentElement.style.setProperty("--canvas-x", `${canvasX}px`);
+    document.documentElement.style.setProperty("--canvas-y", `${canvasY}px`);
   }
 
-  document.addEventListener("pointerdown", (e) => {
-    if (e.button !== 0) return;
+  document.addEventListener(
+    "pointerdown",
+    (e) => {
+      if (e.button !== 0) return;
 
-    const target = e.target as HTMLElement;
-    if (!dialog.contains(target) && !dialog.hidden) {
-      dialog.hidden = true;
-      dialog.classList.toggle("children-hidden");
-    }
-
-    if (clickedElement && !clickedElement.contains(target)) {
-      hideRotationDot(clickedElement);
-    }
-
-    if (e.target !== document.body || isDraggingWindow) return;
-    door.setPointerCapture(e.pointerId);
-    isDraggingWindow = true;
-
-    clickOffsetX = canvasX + e.clientX;
-    clickOffsetY = canvasY + e.clientY;
-  }, { passive: true });
-
-  document.addEventListener("pointermove", (e) => {
-    if (clickedElement) {
-      if (e.target === clickedElement.firstElementChild) {
-        // show cursor when we enter the dot
-        requestAnimationFrame(() => {
-          if (!clickedElement) return;
-          rotateCursor.hidden = false;
-          rotateCursor.style.transform = `translate3d(${e.clientX - 8}px, ${
-            e.clientY - 8
-          }px, 0) rotate(${
-            parseInt(
-              clickedElement.style.getPropertyValue("--rotation"),
-            ) - 45
-          }deg)`;
-        });
-      } else {
-        // hide cursor when we leave the dot
-        rotateCursor.hidden = true;
+      const target = e.target as HTMLElement;
+      if (!dialog.contains(target) && !dialog.hidden) {
+        dialog.hidden = true;
+        dialog.classList.toggle("children-hidden");
       }
-    }
 
-    if (isDraggingWindow) {
-      canvasX = Math.floor(clickOffsetX - e.clientX);
-      canvasY = Math.floor(clickOffsetY - e.clientY);
+      if (clickedElement && !clickedElement.contains(target)) {
+        hideRotationDot(clickedElement);
+      }
 
-      requestAnimationFrame(updateWindow);
-    }
-  }, { passive: true });
+      if (e.target !== document.body || isDraggingWindow) return;
+      door.setPointerCapture(e.pointerId);
+      isDraggingWindow = true;
 
-  document.addEventListener("pointerup", (e) => {
-    if (!isDraggingWindow) return;
-    door.releasePointerCapture(e.pointerId);
-    isDraggingWindow = false;
+      clickOffsetX = canvasX + e.clientX;
+      clickOffsetY = canvasY + e.clientY;
+    },
+    { passive: true },
+  );
 
-    const newCenterX = canvasX + globalThis.innerWidth / 2;
-    const newCenterY = -(canvasY + globalThis.innerHeight / 2);
+  document.addEventListener(
+    "pointermove",
+    (e) => {
+      if (clickedElement) {
+        if (e.target === clickedElement.firstElementChild) {
+          // show cursor when we enter the dot
+          requestAnimationFrame(() => {
+            if (!clickedElement) return;
+            rotateCursor.hidden = false;
+            rotateCursor.style.transform = `translate3d(${e.clientX - 8}px, ${
+              e.clientY - 8
+            }px, 0) rotate(${
+              parseInt(clickedElement.style.getPropertyValue("--rotation")) - 45
+            }deg)`;
+          });
+        } else {
+          // hide cursor when we leave the dot
+          rotateCursor.hidden = true;
+        }
+      }
 
-    const xDiff = Math.abs(centerX - newCenterX);
-    const yDiff = Math.abs(centerY - newCenterY);
-    if (
-      xDiff >= 1.0 || yDiff >= 1.0
-    ) {
-      globalThis.location.replace(`#x=${Math.round(newCenterX)}&y=${
-        Math.round(
-          newCenterY,
-        )
-      }`);
-    }
-  }, { passive: true });
+      if (isDraggingWindow) {
+        canvasX = Math.floor(clickOffsetX - e.clientX);
+        canvasY = Math.floor(clickOffsetY - e.clientY);
+
+        requestAnimationFrame(updateWindow);
+      }
+    },
+    { passive: true },
+  );
+
+  document.addEventListener(
+    "pointerup",
+    (e) => {
+      if (!isDraggingWindow) return;
+      door.releasePointerCapture(e.pointerId);
+      isDraggingWindow = false;
+
+      const newCenterX = canvasX + globalThis.innerWidth / 2;
+      const newCenterY = -(canvasY + globalThis.innerHeight / 2);
+
+      const xDiff = Math.abs(centerX - newCenterX);
+      const yDiff = Math.abs(centerY - newCenterY);
+      if (xDiff >= 1.0 || yDiff >= 1.0) {
+        globalThis.location.replace(
+          `#x=${Math.round(newCenterX)}&y=${Math.round(newCenterY)}`,
+        );
+      }
+    },
+    { passive: true },
+  );
 };
