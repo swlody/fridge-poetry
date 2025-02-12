@@ -68,9 +68,7 @@ webSocket.onmessage = async (e) => {
   if (update[0] instanceof Array) {
     const magnets = [];
     for (const val of update) {
-      magnets.push(
-        new Magnet(val[0], val[1], val[2], val[3], val[4], val[5]),
-      );
+      magnets.push(new Magnet(val[0], val[1], val[2], val[3], val[4], val[5]));
     }
     replaceMagnets(magnets);
   } else if (update[5] !== undefined) {
