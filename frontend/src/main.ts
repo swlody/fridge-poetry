@@ -58,6 +58,8 @@ webSocket.onclose = () => {
   }
 };
 
+let transitioning: HTMLElement | null;
+
 // TODO consider race conditions between this and mouseup replaceMagnets
 // We receive an update to a magnet within our window
 webSocket.onmessage = async (e) => {
@@ -87,11 +89,21 @@ webSocket.onmessage = async (e) => {
     // Received update for magnet within our window
     const element = document.getElementById(`${update[0]}`)!;
 
+    element.style.transition = "0.5s";
+    transitioning = element;
+
     // Object is moving within bounds, update its values
     element.style.setProperty("--local-x", `${update[1]}px`);
     element.style.setProperty("--local-y", `${update[2]}px`);
     element.style.setProperty("--rotation", `${update[3]}deg`);
     element.style.zIndex = update[4].toString();
+
+    setTimeout(() => {
+      if (transitioning) {
+        element.style.transition = "";
+        transitioning = null;
+      }
+    }, 500);
   } else if (update && update.length !== 0) {
     // Received indication that magnet was removed from our window
     const element = document.getElementById(`${update}`)!;
@@ -190,6 +202,11 @@ webSocket.onopen = () => {
     "pointerdown",
     (e) => {
       if (e.button !== 0) return;
+
+      if (transitioning) {
+        transitioning.style.transition = "";
+        transitioning = null;
+      }
 
       const target = e.target as HTMLElement;
       if (!dialog.contains(target) && !dialog.hidden) {
