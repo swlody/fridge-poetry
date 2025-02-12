@@ -275,15 +275,20 @@ async fn send_new_magnets(
 }
 
 #[tracing::instrument]
-async fn update_magnet(update: ClientMagnetUpdate, state: &AppState) -> Result<(), FridgeError> {
+async fn update_magnet(
+    update: ClientMagnetUpdate,
+    session_id: Uuid,
+    state: &AppState,
+) -> Result<(), FridgeError> {
     // TODO coherence checks: inside area bounds and rotation within correct range
     sqlx::query!(
         r#"UPDATE magnets
-           SET coords = Point($1::int, $2::int), rotation = $3, z_index = nextval('magnets_z_index_seq')
-           WHERE id = $4"#,
+           SET coords = Point($1::int, $2::int), rotation = $3, z_index = nextval('magnets_z_index_seq'), last_modifier = $4
+           WHERE id = $5"#,
         update.x,
         update.y,
         update.rotation,
+        session_id,
         update.id
     )
     .execute(&state.postgres)
@@ -298,7 +303,7 @@ pub async fn handle_socket(
         WebSocketStream<tokio::net::TcpStream>,
         tokio_tungstenite::tungstenite::Message,
     >,
-    _session_id: Uuid,
+    session_id: Uuid,
     state: AppState,
 ) {
     let mut rx = state.magnet_updates.subscribe();
@@ -347,7 +352,7 @@ pub async fn handle_socket(
                                     }
                                 }
                                 ClientUpdate::Magnet(magnet_update) => {
-                                    match update_magnet(magnet_update, &state).await {
+                                    match update_magnet(magnet_update, session_id, &state).await {
                                         Err(FridgeError::Sqlx(e)) => {
                                             tracing::error!("Unable to update magnet in databse: {e}");
                                         }
