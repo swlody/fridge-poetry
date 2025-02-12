@@ -15,7 +15,8 @@
   display: inline-block;
   padding: 5px;
   font-family: Georgia, "Times New Roman", Times, serif;
-  box-shadow: 3px 2px rgba(0, 0, 0, 0.6);
+  box-shadow: calc(4px * cos(45deg - var(--rotation)))
+    calc(4px * sin(45deg - var(--rotation))) 2px rgba(0, 0, 0, 0.6);
   user-select: none;
   -webkit-user-select: none;
   cursor: grab;
@@ -35,6 +36,9 @@
   user-select: none;
   -webkit-user-select: none;
   background: white;
+  rotate: var(--rotation);
+  box-shadow: calc(4px * cos(45deg - var(--rotation)))
+    calc(4px * sin(45deg - var(--rotation))) 2px rgba(0, 0, 0, 0.6);
 }
 
 .dot {
