@@ -20,12 +20,10 @@
   -webkit-user-select: none;
   cursor: grab;
   background: white;
-  transition: 0.5s;
 }
 
 .magnet:active {
   cursor: grabbing;
-  transition: none;
 }
 
 .fake-magnet {
