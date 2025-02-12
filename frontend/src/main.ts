@@ -94,7 +94,7 @@ webSocket.onmessage = async (e) => {
     element.style.setProperty("--local-y", `${update[2]}px`);
     element.style.setProperty("--rotation", `${update[3]}deg`);
     element.style.zIndex = update[4].toString();
-  } else {
+  } else if (update && update.length !== 0) {
     // Received indication that magnet was removed from our window
     const element = document.getElementById(`${update}`)!;
     door.removeChild(element);

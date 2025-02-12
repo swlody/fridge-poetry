@@ -1,40 +1,27 @@
-mod middleware;
 mod state;
 mod websocket;
 
-use std::{net::SocketAddr, str::FromStr as _};
+use std::str::FromStr as _;
 
 use anyhow::Result;
-use axum::{
-    extract::{State, WebSocketUpgrade},
-    http::{HeaderMap, HeaderValue, Method, StatusCode},
-    response::IntoResponse,
-    routing::get,
-    Router,
-};
+use futures_util::StreamExt as _;
 use mimalloc::MiMalloc;
 use secrecy::{ExposeSecret as _, SecretString};
-use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
 use serde::Deserialize;
 use sqlx::postgres::PgListener;
 use thiserror::Error;
-use tokio::{net::TcpListener, select, signal, sync::broadcast};
-use tokio_util::sync::CancellationToken;
-use tower::ServiceBuilder;
-use tower_http::{
-    cors::{AllowOrigin, Any, CorsLayer},
-    limit::RequestBodyLimitLayer,
-    trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer},
-    ServiceBuilderExt as _,
+use tokio::{
+    net::{TcpListener, TcpStream},
+    select, signal,
+    sync::broadcast,
 };
+use tokio_tungstenite::tungstenite;
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use tracing::Level;
 use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
 use uuid::Uuid;
 
-use crate::{
-    middleware::{MakeRequestUuidV7, SentryReportRequestInfoLayer},
-    state::{AppState, PgMagnetUpdate},
-};
+use crate::state::{AppState, PgMagnetUpdate};
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -62,7 +49,7 @@ pub enum FridgeError {
     Sqlx(#[from] sqlx::Error),
 
     #[error(transparent)]
-    Axum(#[from] axum::Error),
+    Tungstenite(#[from] tungstenite::Error),
 }
 
 fn main() -> Result<()> {
@@ -160,79 +147,50 @@ async fn run(config: Config) -> Result<()> {
         pg_change_listener,
     ));
 
-    // TODO rate limiting
-    let service_builder = ServiceBuilder::new()
-        .set_x_request_id(MakeRequestUuidV7)
-        .layer(NewSentryLayer::new_from_top())
-        .layer(SentryHttpLayer::with_transaction())
-        .layer(SentryReportRequestInfoLayer)
-        .layer(
-            TraceLayer::new_for_http()
-                .make_span_with(DefaultMakeSpan::new().include_headers(true))
-                .on_response(DefaultOnResponse::new().include_headers(true)),
-        )
-        .propagate_x_request_id()
-        .layer(RequestBodyLimitLayer::new(1024))
-        .layer(
-            CorsLayer::new()
-                .allow_methods([Method::GET, Method::PUT, Method::OPTIONS])
-                .allow_origin(
-                    config
-                        .cors_origin
-                        .and_then(|s| HeaderValue::from_str(s.as_str()).ok())
-                        .map_or_else(AllowOrigin::any, AllowOrigin::from),
-                )
-                .allow_headers(Any),
-        );
-
     let app_state = AppState {
         postgres: pool,
         magnet_updates: tx,
         token: token.clone(),
     };
 
-    let app = Router::new()
-        .route("/health", get(health_check))
-        .route("/ws", get(ws_handler))
-        .layer(service_builder)
-        .with_state(app_state);
-
     let listener = TcpListener::bind("0.0.0.0:8080").await?;
     tracing::info!("Listening on {}", listener.local_addr()?);
-    axum::serve(
-        listener,
-        app.into_make_service_with_connect_info::<SocketAddr>(),
-    )
-    .with_graceful_shutdown(shutdown_signal())
-    .await?;
+    let tracker = TaskTracker::new();
+    loop {
+        select! {
+            accept_result = listener.accept() => {
+                match accept_result {
+                    Ok((stream, _addr)) => {
+                        tracker.spawn(accept_connection(stream, app_state.clone()));
+                    }
+                    Err(e) => {
+                        tracing::error!("Error accepting connection: {}", e);
+                    }
+                }
+            }
+            () = shutdown_signal() => {
+                tracing::info!("Received shutdown signal");
+                break;
+            }
+        }
+    }
 
     token.cancel();
+    tracing::info!("Waiting for broadcast changes task");
+    tracker.close();
+    tracing::info!("Waiting for websocket connections to close");
+    tracker.wait().await;
     broadcast_changes_task.await?;
 
     Ok(())
 }
 
 #[tracing::instrument]
-async fn ws_handler(
-    headers: HeaderMap,
-    ws: WebSocketUpgrade,
-    State(state): State<AppState>,
-) -> Result<impl IntoResponse, StatusCode> {
-    let session_id = headers["x-request-id"]
-        .to_str()
-        .ok()
-        .and_then(|s| Uuid::parse_str(s).ok())
-        .ok_or(StatusCode::BAD_REQUEST)?;
-    Ok(ws.on_upgrade(move |socket| websocket::handle_socket(socket, session_id, state)))
-}
-
-#[tracing::instrument]
-async fn health_check(State(state): State<AppState>) -> impl IntoResponse {
-    if state.postgres.is_closed() {
-        StatusCode::INTERNAL_SERVER_ERROR
-    } else {
-        StatusCode::OK
-    }
+async fn accept_connection(stream: TcpStream, state: AppState) {
+    let session_id = Uuid::now_v7();
+    let ws_stream = tokio_tungstenite::accept_async(stream).await.unwrap();
+    let (writer, reader) = ws_stream.split();
+    websocket::handle_socket(reader, writer, session_id, state).await;
 }
 
 async fn shutdown_signal() {
@@ -253,7 +211,7 @@ async fn shutdown_signal() {
     #[cfg(not(unix))]
     let terminate = std::future::pending::<()>();
 
-    tokio::select! {
+    select! {
         () = ctrl_c => {},
         () = terminate => {},
     }
