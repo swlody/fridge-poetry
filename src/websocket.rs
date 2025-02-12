@@ -168,7 +168,6 @@ struct ClientMagnetUpdate {
     rotation: i32,
 }
 
-// TODO err how are these distinguished? oh well...
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum ClientUpdate {
