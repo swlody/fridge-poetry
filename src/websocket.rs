@@ -1,6 +1,10 @@
-use axum::extract::ws::{Message, WebSocket};
+use futures_util::{
+    stream::{SplitSink, SplitStream},
+    SinkExt as _, StreamExt,
+};
 use serde::{Deserialize, Serialize};
 use tokio::select;
+use tokio_tungstenite::{tungstenite, tungstenite::Message, WebSocketStream};
 use uuid::Uuid;
 
 use crate::{
@@ -175,10 +179,10 @@ enum ClientUpdate {
 // TODO attach timestamp?
 #[tracing::instrument]
 async fn send_relevant_update(
-    socket: &mut WebSocket,
+    writer: &mut SplitSink<WebSocketStream<tokio::net::TcpStream>, tungstenite::Message>,
     client_window: &Window,
     magnet_update: PgMagnetUpdate,
-) -> Result<bool, axum::Error> {
+) -> Result<bool, tungstenite::Error> {
     if client_window.contains(magnet_update.new_x, magnet_update.new_y) {
         if client_window.contains(magnet_update.old_x, magnet_update.old_y) {
             let location_update = MagnetUpdate::Move(LocationUpdate {
@@ -190,7 +194,7 @@ async fn send_relevant_update(
             });
 
             let buf = rmp_serde::to_vec(&location_update).unwrap();
-            socket.send(buf.into()).await?;
+            writer.send(buf.into()).await?;
         } else {
             let create_update = MagnetUpdate::Create(Magnet {
                 id: magnet_update.id,
@@ -202,14 +206,14 @@ async fn send_relevant_update(
             });
 
             let buf = rmp_serde::to_vec(&create_update).unwrap();
-            socket.send(buf.into()).await?;
+            writer.send(buf.into()).await?;
         }
         Ok(true)
     } else if client_window.contains(magnet_update.old_x, magnet_update.old_y) {
         let remove_update = MagnetUpdate::Remove(magnet_update.id);
 
         let buf = rmp_serde::to_vec(&remove_update).unwrap();
-        socket.send(buf.into()).await?;
+        writer.send(buf.into()).await?;
         Ok(true)
     } else {
         Ok(false)
@@ -218,7 +222,7 @@ async fn send_relevant_update(
 
 #[tracing::instrument]
 async fn send_new_magnets(
-    socket: &mut WebSocket,
+    writer: &mut SplitSink<WebSocketStream<tokio::net::TcpStream>, tungstenite::Message>,
     shape: &Shape,
     state: &AppState,
 ) -> Result<(), FridgeError> {
@@ -267,7 +271,7 @@ async fn send_new_magnets(
     };
 
     let buf = rmp_serde::to_vec(&MagnetUpdate::CanvasUpdate(magnets)).unwrap();
-    socket.send(buf.into()).await?;
+    writer.send(buf.into()).await?;
     Ok(())
 }
 
@@ -289,13 +293,20 @@ async fn update_magnet(update: ClientMagnetUpdate, state: &AppState) -> Result<(
     Ok(())
 }
 
-pub async fn handle_socket(mut socket: WebSocket, _session_id: Uuid, state: AppState) {
+pub async fn handle_socket(
+    mut reader: SplitStream<WebSocketStream<tokio::net::TcpStream>>,
+    mut writer: SplitSink<
+        WebSocketStream<tokio::net::TcpStream>,
+        tokio_tungstenite::tungstenite::Message,
+    >,
+    _session_id: Uuid,
+    state: AppState,
+) {
     let mut rx = state.magnet_updates.subscribe();
     let mut client_window = Window::default();
 
     loop {
         select! {
-            // TODO how to wait for this task before exiting?
             () = state.token.cancelled() => {
                 break;
             }
@@ -304,7 +315,7 @@ pub async fn handle_socket(mut socket: WebSocket, _session_id: Uuid, state: AppS
             magnet_update = rx.recv() => {
                 let magnet_update = magnet_update.expect("Broadcast sender unexpectedly dropped");
 
-                if send_relevant_update(&mut socket, &client_window, magnet_update)
+                if send_relevant_update(&mut writer, &client_window, magnet_update)
                     .await
                     .is_err()
                 {
@@ -314,7 +325,7 @@ pub async fn handle_socket(mut socket: WebSocket, _session_id: Uuid, state: AppS
             }
 
             // Update to watch window from WebSocket
-            message = socket.recv() => {
+            message = reader.next() => {
                 match message {
                     Some(Ok(Message::Binary(bytes))) => {
                         if let Ok(client_update) = rmp_serde::from_slice(&bytes) {
@@ -324,9 +335,9 @@ pub async fn handle_socket(mut socket: WebSocket, _session_id: Uuid, state: AppS
                                     client_window = window_update;
 
                                     if let Some(difference) = difference {
-                                        match send_new_magnets(&mut socket, &difference, &state).await {
+                                        match send_new_magnets(&mut writer, &difference, &state).await {
                                             Ok(()) => {},
-                                            Err(FridgeError::Axum(e)) => {
+                                            Err(FridgeError::Tungstenite(e)) => {
                                                 tracing::debug!("Unable to send new magnets, disconnecting websocket: {e}");
                                                 break;
                                             }
