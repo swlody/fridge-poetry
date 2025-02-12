@@ -84,6 +84,8 @@ fn main() -> Result<()> {
         None
     };
 
+    tracing::debug!("broadcast_capacity: {:?}", config.broadcast_capacity);
+
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?
@@ -94,6 +96,7 @@ async fn broadcast_changes(
     tx: tokio::sync::broadcast::Sender<PgMagnetUpdate>,
     token: CancellationToken,
     mut pg_change_listener: PgListener,
+    broadcast_capacity: usize,
 ) {
     loop {
         select! {
@@ -104,10 +107,11 @@ async fn broadcast_changes(
                 match res {
                     Ok(msg) => {
                         let magnet_update = serde_json::from_str(msg.payload()).expect("Received invalid JSON from postgres");
-                        if tx.len() >= 10 {
+                        if tx.len() >= broadcast_capacity {
                             tracing::error!(
-                                "Potentially dropping queued magnet updates.\
-                                Consider increasing the capacity of the broadcast channel."
+                                "Potentially dropping queued magnet updates. \
+                                Consider increasing the capacity of the broadcast channel. \
+                                Current capacity: {broadcast_capacity}"
                             );
                         }
 
@@ -139,18 +143,22 @@ async fn run(config: Config) -> Result<()> {
     let mut pg_change_listener = PgListener::connect_with(&pool).await?;
     pg_change_listener.listen("magnet_updates").await?;
 
-    let tx = broadcast::Sender::new(config.broadcast_capacity.unwrap_or(10));
+    let broadcast_capacity = config.broadcast_capacity.unwrap_or(10);
+    let tx = broadcast::Sender::new(broadcast_capacity);
 
     let broadcast_changes_task = tokio::task::spawn(broadcast_changes(
         tx.clone(),
         token.clone(),
         pg_change_listener,
+        broadcast_capacity,
     ));
 
     let app_state = AppState {
         postgres: pool,
         magnet_updates: tx,
         token: token.clone(),
+        window_count: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        window_request_micros: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
     };
 
     let listener = TcpListener::bind("0.0.0.0:8080").await?;
@@ -182,10 +190,24 @@ async fn run(config: Config) -> Result<()> {
     tracker.wait().await;
     broadcast_changes_task.await?;
 
+    let count = app_state
+        .window_count
+        .load(std::sync::atomic::Ordering::SeqCst);
+
+    let micros = app_state
+        .window_request_micros
+        .load(std::sync::atomic::Ordering::SeqCst);
+
+    tracing::info!(
+        "total_requests: {}, total_time: {}, average: {}us",
+        count,
+        micros,
+        micros / count
+    );
+
     Ok(())
 }
 
-#[tracing::instrument]
 async fn accept_connection(stream: TcpStream, state: AppState) {
     let session_id = Uuid::now_v7();
     let ws_stream = tokio_tungstenite::accept_async(stream).await.unwrap();

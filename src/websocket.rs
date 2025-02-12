@@ -3,7 +3,7 @@ use futures_util::{
     SinkExt as _, StreamExt,
 };
 use serde::{Deserialize, Serialize};
-use tokio::select;
+use tokio::{net::TcpStream, select};
 use tokio_tungstenite::{tungstenite, tungstenite::Message, WebSocketStream};
 use uuid::Uuid;
 
@@ -108,8 +108,8 @@ impl Window {
         let center_y = points.iter().map(|p| p.y).sum::<i32>() / points.len() as i32;
 
         points.sort_by(|a, b| {
-            let angle_a = (-((a.y - center_y) as f64).atan2((a.x - center_x) as f64)) as f64;
-            let angle_b = (-((b.y - center_y) as f64).atan2((b.x - center_x) as f64)) as f64;
+            let angle_a = -((a.y - center_y) as f64).atan2((a.x - center_x) as f64);
+            let angle_b = -((b.y - center_y) as f64).atan2((b.x - center_x) as f64);
             angle_a.partial_cmp(&angle_b).unwrap()
         });
 
@@ -178,7 +178,7 @@ enum ClientUpdate {
 // TODO attach timestamp?
 #[tracing::instrument]
 async fn send_relevant_update(
-    writer: &mut SplitSink<WebSocketStream<tokio::net::TcpStream>, tungstenite::Message>,
+    writer: &mut SplitSink<WebSocketStream<TcpStream>, tungstenite::Message>,
     client_window: &Window,
     magnet_update: PgMagnetUpdate,
 ) -> Result<bool, tungstenite::Error> {
@@ -221,10 +221,11 @@ async fn send_relevant_update(
 
 #[tracing::instrument]
 async fn send_new_magnets(
-    writer: &mut SplitSink<WebSocketStream<tokio::net::TcpStream>, tungstenite::Message>,
+    writer: &mut SplitSink<WebSocketStream<TcpStream>, tungstenite::Message>,
     shape: &Shape,
     state: &AppState,
 ) -> Result<(), FridgeError> {
+    let start = std::time::Instant::now();
     let magnets = match shape {
         Shape::Window(window) => sqlx::query_as!(
             Magnet,
@@ -268,6 +269,14 @@ async fn send_new_magnets(
         .fetch_all(&state.postgres)
         .await?,
     };
+    let time = std::time::Instant::now() - start;
+    state
+        .window_count
+        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    state.window_request_micros.fetch_add(
+        time.as_micros() as u64,
+        std::sync::atomic::Ordering::Relaxed,
+    );
 
     let buf = rmp_serde::to_vec(&MagnetUpdate::CanvasUpdate(magnets)).unwrap();
     writer.send(buf.into()).await?;
@@ -298,11 +307,8 @@ async fn update_magnet(
 }
 
 pub async fn handle_socket(
-    mut reader: SplitStream<WebSocketStream<tokio::net::TcpStream>>,
-    mut writer: SplitSink<
-        WebSocketStream<tokio::net::TcpStream>,
-        tokio_tungstenite::tungstenite::Message,
-    >,
+    mut reader: SplitStream<WebSocketStream<TcpStream>>,
+    mut writer: SplitSink<WebSocketStream<TcpStream>, tungstenite::Message>,
     session_id: Uuid,
     state: AppState,
 ) {
@@ -329,6 +335,7 @@ pub async fn handle_socket(
             }
 
             // Update to watch window from WebSocket
+            // TODO yikes... reduce nesting?
             message = reader.next() => {
                 match message {
                     Some(Ok(Message::Binary(bytes))) => {
@@ -352,11 +359,8 @@ pub async fn handle_socket(
                                     }
                                 }
                                 ClientUpdate::Magnet(magnet_update) => {
-                                    match update_magnet(magnet_update, session_id, &state).await {
-                                        Err(FridgeError::Sqlx(e)) => {
-                                            tracing::error!("Unable to update magnet in databse: {e}");
-                                        }
-                                        _ => {}
+                                    if let Err(FridgeError::Sqlx(e)) = update_magnet(magnet_update, session_id, &state).await {
+                                        tracing::error!("Unable to update magnet in databse: {e}");
                                     }
                                 }
                             }

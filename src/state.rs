@@ -17,4 +17,6 @@ pub struct AppState {
     pub postgres: sqlx::PgPool,
     pub magnet_updates: tokio::sync::broadcast::Sender<PgMagnetUpdate>,
     pub token: tokio_util::sync::CancellationToken,
+    pub window_count: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    pub window_request_micros: std::sync::Arc<std::sync::atomic::AtomicU64>,
 }
