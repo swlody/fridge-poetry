@@ -68,19 +68,10 @@ function packedMagnetUpdate(
   y: number,
   rotation: number,
 ) {
-  return pack([
-    true,
-    id,
-    x,
-    y,
-    rotation,
-  ]);
+  return pack([true, id, x, y, rotation]);
 }
 
-function setupEventListeners(
-  element: HTMLElement,
-  webSocket: WebSocket,
-) {
+function setupEventListeners(element: HTMLElement, webSocket: WebSocket) {
   let clickOffsetX = 0;
   let clickOffsetY = 0;
 
@@ -179,8 +170,7 @@ function setupEventListeners(
 
         if (
           !hasChanged ||
-          (Math.abs(newX - originalX) < 0.5 &&
-            Math.abs(newY - originalY) < 0.5)
+          (Math.abs(newX - originalX) < 0.5 && Math.abs(newY - originalY) < 0.5)
         ) {
           if (!clickedElement) {
             showRotationDot(element);
