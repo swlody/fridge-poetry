@@ -198,10 +198,15 @@ webSocket.onopen = () => {
 
   document.body.removeChild(document.getElementById("loader")!);
 
+  const evCache: PointerEvent[] = [];
+  let prevDiff = -1;
+
   document.addEventListener(
     "pointerdown",
     (e) => {
-      if (!e.isPrimary) return;
+      if (e.button !== 0) return;
+
+      evCache.push(e);
 
       if (transitioning) {
         transitioning.style.transition = "";
@@ -218,7 +223,9 @@ webSocket.onopen = () => {
         hideRotationDot(clickedElement);
       }
 
-      if (e.target !== document.body || isDraggingWindow) return;
+      if (
+        e.target !== document.body || isDraggingWindow || evCache.length > 1
+      ) return;
       door.setPointerCapture(e.pointerId);
       isDraggingWindow = true;
 
@@ -231,7 +238,24 @@ webSocket.onopen = () => {
   document.addEventListener(
     "pointermove",
     (e) => {
-      if (isDraggingWindow) {
+      const index = evCache.findIndex(
+        (cachedEv) => cachedEv.pointerId == e.pointerId,
+      );
+      evCache[index] = e;
+
+      if (evCache.length === 2) {
+        const curDiff = Math.abs(evCache[0].clientX - evCache[1].clientX);
+
+        if (prevDiff > 0) {
+          scale += (curDiff - prevDiff) / 500;
+          scale = Math.min(Math.max(0.5, scale), 1.5);
+          requestAnimationFrame(() => {
+            document.documentElement.style.setProperty("--scale", `${scale}`);
+          });
+        }
+
+        prevDiff = curDiff;
+      } else if (evCache.length === 1 && isDraggingWindow) {
         canvasX = Math.floor(clickOffsetX - e.clientX / scale);
         canvasY = Math.floor(clickOffsetY - e.clientY / scale);
 
@@ -253,6 +277,15 @@ webSocket.onopen = () => {
   document.addEventListener(
     "pointerup",
     (e) => {
+      const index = evCache.findIndex(
+        (cachedEv) => cachedEv.pointerId === e.pointerId,
+      );
+      evCache.splice(index, 1);
+
+      if (evCache.length < 2) {
+        prevDiff = -1;
+      }
+
       if (!isDraggingWindow) return;
       door.releasePointerCapture(e.pointerId);
       isDraggingWindow = false;
