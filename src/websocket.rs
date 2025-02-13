@@ -320,7 +320,6 @@ pub async fn handle_socket(
             magnet_update = rx.recv() => {
                 let magnet_update = magnet_update.expect("Broadcast sender unexpectedly dropped");
 
-                tracing::debug!("Sending postgres data to client");
                 if send_relevant_update(&mut writer, &client_window, magnet_update)
                     .await
                     .is_err()
@@ -338,12 +337,10 @@ pub async fn handle_socket(
                         if let Ok(client_update) = rmp_serde::from_slice(&bytes) {
                             match client_update {
                                 ClientUpdate::Window(window_update) => {
-                                    tracing::debug!("Updating client window");
                                     let difference = client_window.difference(&window_update);
                                     client_window = window_update;
 
                                     if let Some(difference) = difference {
-                                        tracing::debug!("Sending requested magnets");
                                         match send_new_magnets(&mut writer, &difference, &state).await {
                                             Ok(()) => {},
                                             Err(FridgeError::Tungstenite(e)) => {
@@ -357,7 +354,6 @@ pub async fn handle_socket(
                                     }
                                 }
                                 ClientUpdate::Magnet(magnet_update) => {
-                                    tracing::debug!("Received magnet update request. updating");
                                     if let Err(FridgeError::Sqlx(e)) = update_magnet(magnet_update, session_id, &state).await {
                                         tracing::error!("Unable to update magnet in databse: {e}");
                                     }
