@@ -3,6 +3,7 @@ import { pack } from "msgpackr";
 import { scale } from "./main.ts";
 
 export let clickedElement: HTMLElement | null = null;
+export let isDraggingMagnet = false;
 
 export class Magnet {
   id: number;
@@ -113,6 +114,7 @@ function setupEventListeners(element: HTMLElement, webSocket: WebSocket) {
         initialAngle = getAngle(element, e.clientX, e.clientY);
       } else {
         isDragging = true;
+        isDraggingMagnet = true;
         hasChanged = false;
 
         element.style.zIndex = "2147483647";
@@ -169,6 +171,7 @@ function setupEventListeners(element: HTMLElement, webSocket: WebSocket) {
         element.releasePointerCapture(e.pointerId);
 
         isDragging = false;
+        isDraggingMagnet = false;
 
         if (
           !hasChanged ||

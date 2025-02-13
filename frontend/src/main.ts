@@ -1,6 +1,11 @@
 import { pack, unpack } from "msgpackr";
 
-import { clickedElement, hideRotationDot, Magnet } from "./magnet.ts";
+import {
+  clickedElement,
+  hideRotationDot,
+  isDraggingMagnet,
+  Magnet,
+} from "./magnet.ts";
 
 import "./style.css";
 
@@ -208,6 +213,8 @@ webSocket.onopen = () => {
 
       evCache.push(e);
 
+      if (evCache.length > 1) return;
+
       if (transitioning) {
         transitioning.style.transition = "";
         transitioning = null;
@@ -238,13 +245,17 @@ webSocket.onopen = () => {
   document.addEventListener(
     "pointermove",
     (e) => {
+      if (isDraggingMagnet) return;
+
       const index = evCache.findIndex(
         (cachedEv) => cachedEv.pointerId == e.pointerId,
       );
       evCache[index] = e;
 
       if (evCache.length === 2) {
-        const curDiff = Math.abs(evCache[0].clientX - evCache[1].clientX);
+        const xDiff = evCache[0].clientX - evCache[1].clientX;
+        const yDiff = evCache[0].clientY - evCache[1].clientY;
+        const curDiff = Math.sqrt((xDiff * xDiff) + (yDiff * yDiff));
 
         if (prevDiff > 0) {
           scale += (curDiff - prevDiff) / 500;
@@ -286,7 +297,7 @@ webSocket.onopen = () => {
         prevDiff = -1;
       }
 
-      if (!isDraggingWindow) return;
+      if (!isDraggingWindow || evCache.length > 0) return;
       door.releasePointerCapture(e.pointerId);
       isDraggingWindow = false;
 
