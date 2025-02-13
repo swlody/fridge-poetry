@@ -194,8 +194,8 @@ webSocket.onopen = () => {
   }
 
   if (!globalThis.location.hash) {
-    const randomX = Math.round(Math.random() * 100000);
-    const randomY = Math.round(Math.random() * 100000);
+    const randomX = Math.round(Math.random() * 10000);
+    const randomY = Math.round(Math.random() * 10000);
     globalThis.location.replace(`#x=${randomX}&y=${randomY}`);
   }
 
