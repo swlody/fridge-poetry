@@ -50,6 +50,7 @@ impl Window {
         x >= self.x1 && x <= self.x2 && y >= self.y1 && y <= self.y2
     }
 
+    #[tracing::instrument]
     fn difference(&self, other: &Window) -> Option<Shape> {
         // Check if there's no intersection
         if self.x2 <= other.x1 || other.x2 <= self.x1 || self.y2 <= other.y1 || other.y2 <= self.y1

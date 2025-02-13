@@ -16,6 +16,7 @@
   display: inline-block;
   padding: 5px;
   font-family: Georgia, "Times New Roman", Times, serif;
+  --rotation: 0deg;
   box-shadow: calc(4px * cos(45deg - var(--rotation)))
     calc(4px * sin(45deg - var(--rotation))) 2px rgba(0, 0, 0, 0.6);
   user-select: none;
@@ -33,34 +34,38 @@
   display: inline-block;
   padding: 5px;
   font-family: Georgia, "Times New Roman", Times, serif;
-  -webkit-user-select: none;
+  --rotation: 0deg;
   rotate: var(--rotation);
   box-shadow: calc(4px * cos(45deg - var(--rotation)))
     calc(4px * sin(45deg - var(--rotation))) 2px rgba(0, 0, 0, 0.6);
   user-select: none;
+  -webkit-user-select: none;
   background: white;
 }
 
 .rotate-dot {
-  top: -20px;
-  left: calc(50% - 5px);
-  height: 10px;
-  width: 10px;
+  top: -25px;
+  left: calc(50% - 6.5px);
+  height: 12px;
+  width: 12px;
   background-color: plum;
   position: absolute;
-  border-radius: 100px;
-  border: 1px solid white;
+  border-radius: 12px;
+  border: 1px solid cornsilk;
   user-select: none;
+  -webkit-user-select: none;
 }
 
 .rotate-link {
   position: absolute;
   width: 1px;
-  height: 15px;
+  height: 11px;
   background-color: plum;
-  top: -15px;
-  left: calc(50% + 0.5px);
-  z-index: -1;
+  top: -12px;
+  left: calc(50% - 1px);
+  border: 1px solid cornsilk;
+  border-top: none;
+  border-bottom: none;
 }
 
 body {
