@@ -12,6 +12,9 @@ use crate::{
     FridgeError,
 };
 
+type WsStream = SplitStream<WebSocketStream<TcpStream>>;
+type WsSink = SplitSink<WebSocketStream<TcpStream>, tungstenite::Message>;
+
 #[derive(Clone, Debug)]
 struct Point {
     x: i32,
@@ -178,7 +181,7 @@ enum ClientUpdate {
 // TODO attach timestamp?
 #[tracing::instrument]
 async fn send_relevant_update(
-    writer: &mut SplitSink<WebSocketStream<TcpStream>, tungstenite::Message>,
+    writer: &mut WsSink,
     client_window: &Window,
     magnet_update: PgMagnetUpdate,
 ) -> Result<bool, tungstenite::Error> {
@@ -221,7 +224,7 @@ async fn send_relevant_update(
 
 #[tracing::instrument]
 async fn send_new_magnets(
-    writer: &mut SplitSink<WebSocketStream<TcpStream>, tungstenite::Message>,
+    writer: &mut WsSink,
     shape: &Shape,
     state: &AppState,
 ) -> Result<(), FridgeError> {
@@ -307,8 +310,8 @@ async fn update_magnet(
 }
 
 pub async fn handle_socket(
-    mut reader: SplitStream<WebSocketStream<TcpStream>>,
-    mut writer: SplitSink<WebSocketStream<TcpStream>, tungstenite::Message>,
+    mut reader: WsStream,
+    mut writer: WsSink,
     session_id: Uuid,
     state: AppState,
 ) {
