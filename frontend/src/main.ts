@@ -297,7 +297,7 @@ webSocket.onopen = () => {
         prevDiff = -1;
       }
 
-      if (!isDraggingWindow || evCache.length > 0) return;
+      if (!isDraggingWindow) return;
       door.releasePointerCapture(e.pointerId);
       isDraggingWindow = false;
 
