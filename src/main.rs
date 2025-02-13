@@ -209,10 +209,15 @@ async fn run(config: Config) -> Result<()> {
 }
 
 async fn accept_connection(stream: TcpStream, state: AppState) {
-    let session_id = Uuid::now_v7();
-    let ws_stream = tokio_tungstenite::accept_async(stream).await.unwrap();
-    let (writer, reader) = ws_stream.split();
-    websocket::handle_socket(reader, writer, session_id, state).await;
+    match tokio_tungstenite::accept_async(stream).await {
+        Ok(ws_stream) => {
+            let (writer, reader) = ws_stream.split();
+            websocket::handle_socket(reader, writer, Uuid::now_v7(), state).await;
+        }
+        Err(e) => {
+            tracing::warn!("Unable to open websocket connection: {}", e);
+        }
+    }
 }
 
 async fn shutdown_signal() {
