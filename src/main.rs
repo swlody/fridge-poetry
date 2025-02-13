@@ -84,8 +84,6 @@ fn main() -> Result<()> {
         None
     };
 
-    tracing::debug!("broadcast_capacity: {:?}", config.broadcast_capacity);
-
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?
@@ -143,7 +141,7 @@ async fn run(config: Config) -> Result<()> {
     let mut pg_change_listener = PgListener::connect_with(&pool).await?;
     pg_change_listener.listen("magnet_updates").await?;
 
-    let broadcast_capacity = config.broadcast_capacity.unwrap_or(10);
+    let broadcast_capacity = config.broadcast_capacity.unwrap_or(100);
     let tx = broadcast::Sender::new(broadcast_capacity);
 
     let broadcast_changes_task = tokio::task::spawn(broadcast_changes(
@@ -157,8 +155,6 @@ async fn run(config: Config) -> Result<()> {
         postgres: pool,
         magnet_updates: tx,
         token: token.clone(),
-        window_count: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        window_request_micros: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
     };
 
     let listener = TcpListener::bind("0.0.0.0:8080").await?;
@@ -172,7 +168,7 @@ async fn run(config: Config) -> Result<()> {
                         tracker.spawn(accept_connection(stream, app_state.clone()));
                     }
                     Err(e) => {
-                        tracing::error!("Error accepting connection: {}", e);
+                        tracing::warn!("Error accepting connection: {}", e);
                     }
                 }
             }
@@ -189,21 +185,6 @@ async fn run(config: Config) -> Result<()> {
     tracing::info!("Waiting for websocket connections to close");
     tracker.wait().await;
     broadcast_changes_task.await?;
-
-    let count = app_state
-        .window_count
-        .load(std::sync::atomic::Ordering::SeqCst);
-
-    let micros = app_state
-        .window_request_micros
-        .load(std::sync::atomic::Ordering::SeqCst);
-
-    tracing::info!(
-        "total_requests: {}, total_time: {}, average: {}us",
-        count,
-        micros,
-        micros / count
-    );
 
     Ok(())
 }
