@@ -8,3 +8,4 @@ fly.toml
 Dockerfile
 .dockerignore
 .git/
+.github/
