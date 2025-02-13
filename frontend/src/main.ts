@@ -230,9 +230,8 @@ webSocket.onopen = () => {
         hideRotationDot(clickedElement);
       }
 
-      if (
-        e.target !== document.body || isDraggingWindow || evCache.length > 1
-      ) return;
+      if (e.target !== document.body || isDraggingWindow || evCache.length > 1)
+        return;
       door.setPointerCapture(e.pointerId);
       isDraggingWindow = true;
 
@@ -255,7 +254,7 @@ webSocket.onopen = () => {
       if (evCache.length === 2) {
         const xDiff = evCache[0].clientX - evCache[1].clientX;
         const yDiff = evCache[0].clientY - evCache[1].clientY;
-        const curDiff = Math.sqrt((xDiff * xDiff) + (yDiff * yDiff));
+        const curDiff = Math.sqrt(xDiff * xDiff + yDiff * yDiff);
 
         if (prevDiff > 0) {
           scale += (curDiff - prevDiff) / 500;
