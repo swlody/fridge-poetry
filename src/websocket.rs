@@ -107,6 +107,7 @@ impl Window {
             });
         }
 
+        #[allow(clippy::len_zero)]
         if points.len() == 0 {
             tracing::error!("you dumbass");
         }
