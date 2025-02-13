@@ -6,6 +6,8 @@ import "./style.css";
 
 const WS_URL = import.meta.env.VITE_WS_BASE_URL || "ws";
 
+export let scale = 1.0;
+
 // Window that represents the total area of magnets in the DOM
 // This is a 3x3 grid of [viewport area] centered at the actual viewport
 class Window {
@@ -113,8 +115,6 @@ webSocket.onmessage = async (e) => {
 
 let viewWindow: Window;
 
-const rotateCursor = document.getElementById("rotate-cursor")!;
-
 // Add new elements to DOM, remove old elements
 function replaceMagnets(magnetArray: Magnet[]) {
   const newElements = new DocumentFragment();
@@ -178,10 +178,10 @@ webSocket.onopen = () => {
     document.documentElement.style.setProperty("--canvas-y", `${canvasY}px`);
 
     viewWindow = new Window(
-      Math.round(canvasX - globalThis.innerWidth),
-      Math.round(canvasY - globalThis.innerHeight),
-      Math.round(canvasX + 2 * globalThis.innerWidth),
-      Math.round(canvasY + 2 * globalThis.innerHeight),
+      Math.round(canvasX - (globalThis.innerWidth / scale)),
+      Math.round(canvasY - (globalThis.innerHeight / scale)),
+      Math.round(canvasX + (2 * globalThis.innerWidth / scale)),
+      Math.round(canvasY + (2 * globalThis.innerHeight / scale)),
     );
 
     webSocket.send(viewWindow.pack());
@@ -198,13 +198,10 @@ webSocket.onopen = () => {
 
   document.body.removeChild(document.getElementById("loader")!);
 
-  const activePointers = new Set();
-
   document.addEventListener(
     "pointerdown",
     (e) => {
-      activePointers.add(e.pointerId);
-      if (!e.isPrimary || activePointers.size > 1) return;
+      if (!e.isPrimary) return;
 
       if (transitioning) {
         transitioning.style.transition = "";
@@ -225,8 +222,8 @@ webSocket.onopen = () => {
       door.setPointerCapture(e.pointerId);
       isDraggingWindow = true;
 
-      clickOffsetX = canvasX + e.clientX;
-      clickOffsetY = canvasY + e.clientY;
+      clickOffsetX = canvasX + e.clientX / scale;
+      clickOffsetY = canvasY + e.clientY / scale;
     },
     { passive: true },
   );
@@ -234,29 +231,9 @@ webSocket.onopen = () => {
   document.addEventListener(
     "pointermove",
     (e) => {
-      if (activePointers.size > 1) return;
-
-      if (clickedElement) {
-        if (e.target === clickedElement.firstElementChild) {
-          // show cursor when we enter the dot
-          requestAnimationFrame(() => {
-            if (!clickedElement) return;
-            rotateCursor.hidden = false;
-            rotateCursor.style.transform = `translate3d(${e.clientX - 8}px, ${
-              e.clientY - 8
-            }px, 0) rotate(${
-              parseInt(clickedElement.style.getPropertyValue("--rotation")) - 45
-            }deg)`;
-          });
-        } else {
-          // hide cursor when we leave the dot
-          rotateCursor.hidden = true;
-        }
-      }
-
       if (isDraggingWindow) {
-        canvasX = Math.floor(clickOffsetX - e.clientX);
-        canvasY = Math.floor(clickOffsetY - e.clientY);
+        canvasX = Math.floor(clickOffsetX - e.clientX / scale);
+        canvasY = Math.floor(clickOffsetY - e.clientY / scale);
 
         requestAnimationFrame(() => {
           document.documentElement.style.setProperty(
@@ -276,7 +253,6 @@ webSocket.onopen = () => {
   document.addEventListener(
     "pointerup",
     (e) => {
-      activePointers.delete(e.pointerId);
       if (!isDraggingWindow) return;
       door.releasePointerCapture(e.pointerId);
       isDraggingWindow = false;
@@ -298,5 +274,13 @@ webSocket.onopen = () => {
 
   document.addEventListener("touchend", (e) => {
     e.preventDefault();
-  });
+  }, { passive: true });
+
+  document.addEventListener("wheel", (e) => {
+    e.preventDefault();
+
+    scale += e.deltaY * -0.01;
+    scale = Math.min(Math.max(0.5, scale), 1.5);
+    document.documentElement.style.setProperty("--scale", `${scale}`);
+  }, { passive: true });
 };
