@@ -20,6 +20,7 @@ RUN objcopy --add-gnu-debuglink=/app/target/release/fridge-poetry.debug /app/tar
 
 RUN curl -sL https://sentry.io/get-cli | bash
 
+# Upload debug info
 RUN mv /app/target/release/fridge-poetry.debug /app
 RUN --mount=type=secret,id=sentry_auth_token \
     sentry-cli debug-files upload --include-sources --org sam-wlody --project fridge-poetry --auth-token $(cat /run/secrets/sentry_auth_token) /app/fridge-poetry.debug
