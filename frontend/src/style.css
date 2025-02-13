@@ -114,8 +114,8 @@ footer {
 }
 
 .loader {
-  border: 12px solid lightgray; /* Light grey */
-  border-top: 12px solid plum; /* Blue */
+  border: 12px solid lightgray;
+  border-top: 12px solid plum;
   border-radius: 50%;
   width: 8vh;
   height: 8vh;
