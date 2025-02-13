@@ -312,6 +312,10 @@ pub async fn handle_socket(
     session_id: Uuid,
     state: AppState,
 ) {
+    sentry::configure_scope(|scope| {
+        scope.set_tag("session_id", session_id);
+    });
+
     let mut rx = state.magnet_updates.subscribe();
     let mut client_window = Window::default();
 
