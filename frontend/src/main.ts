@@ -279,7 +279,7 @@ webSocket.onopen = () => {
   document.addEventListener("wheel", (e) => {
     e.preventDefault();
 
-    scale += e.deltaY * -0.01;
+    scale += e.deltaY * -0.001;
     scale = Math.min(Math.max(0.5, scale), 1.5);
     document.documentElement.style.setProperty("--scale", `${scale}`);
   }, { passive: true });
