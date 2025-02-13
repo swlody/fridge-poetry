@@ -107,6 +107,10 @@ impl Window {
             });
         }
 
+        if points.len() == 0 {
+            tracing::error!("you dumbass");
+        }
+
         // Sort points clockwise
         let center_x = points.iter().map(|p| p.x).sum::<i32>() / points.len() as i32;
         let center_y = points.iter().map(|p| p.y).sum::<i32>() / points.len() as i32;
