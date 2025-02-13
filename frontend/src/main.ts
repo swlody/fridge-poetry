@@ -178,10 +178,10 @@ webSocket.onopen = () => {
     document.documentElement.style.setProperty("--canvas-y", `${canvasY}px`);
 
     viewWindow = new Window(
-      Math.round(canvasX - (globalThis.innerWidth / scale)),
-      Math.round(canvasY - (globalThis.innerHeight / scale)),
-      Math.round(canvasX + (2 * globalThis.innerWidth / scale)),
-      Math.round(canvasY + (2 * globalThis.innerHeight / scale)),
+      Math.round(canvasX - globalThis.innerWidth / scale),
+      Math.round(canvasY - globalThis.innerHeight / scale),
+      Math.round(canvasX + (2 * globalThis.innerWidth) / scale),
+      Math.round(canvasY + (2 * globalThis.innerHeight) / scale),
     );
 
     webSocket.send(viewWindow.pack());
@@ -272,15 +272,23 @@ webSocket.onopen = () => {
     { passive: true },
   );
 
-  document.addEventListener("touchend", (e) => {
-    e.preventDefault();
-  }, { passive: true });
+  document.addEventListener(
+    "touchend",
+    (e) => {
+      e.preventDefault();
+    },
+    { passive: true },
+  );
 
-  document.addEventListener("wheel", (e) => {
-    e.preventDefault();
+  document.addEventListener(
+    "wheel",
+    (e) => {
+      e.preventDefault();
 
-    scale += e.deltaY * -0.001;
-    scale = Math.min(Math.max(0.5, scale), 1.5);
-    document.documentElement.style.setProperty("--scale", `${scale}`);
-  }, { passive: true });
+      scale += e.deltaY * -0.001;
+      scale = Math.min(Math.max(0.5, scale), 1.5);
+      document.documentElement.style.setProperty("--scale", `${scale}`);
+    },
+    { passive: true },
+  );
 };
