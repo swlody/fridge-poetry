@@ -73,6 +73,7 @@ let transitioning: HTMLElement | null;
 webSocket.onmessage = async (e) => {
   // gross untyped nonsense, yuck yuck yuck
   const update = unpack(await e.data.arrayBuffer());
+  console.log("received updated " + update);
 
   // inferring the type of the update based on structure 🤢
   if (update[0] instanceof Array) {
@@ -82,6 +83,7 @@ webSocket.onmessage = async (e) => {
     }
     replaceMagnets(magnets);
   } else if (update[5] !== undefined) {
+    console.log("out of bounds update");
     // New object arriving from out of bounds, create it
     door.append(
       new Magnet(
@@ -94,6 +96,7 @@ webSocket.onmessage = async (e) => {
       ).toElement(webSocket),
     );
   } else if (update[4] !== undefined) {
+    console.log("in bounds update");
     // Received update for magnet within our window
     const element = document.getElementById(`${update[0]}`)!;
 
@@ -113,6 +116,7 @@ webSocket.onmessage = async (e) => {
       }
     }, 500);
   } else if (update && update.length !== 0) {
+    console.log("remove update");
     // Received indication that magnet was removed from our window
     const element = document.getElementById(`${update}`)!;
     door.removeChild(element);
