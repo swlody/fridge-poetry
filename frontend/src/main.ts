@@ -57,6 +57,7 @@ webSocket.onerror = (err) => {
   webSocket.close();
 };
 
+// TODO check reconnect logic
 webSocket.onclose = () => {
   while (!webSocket.OPEN) {
     setTimeout(() => {
@@ -230,8 +231,13 @@ webSocket.onopen = () => {
         hideRotationDot(clickedElement);
       }
 
-      if (e.target !== document.body || isDraggingWindow || evCache.length > 1)
+      if (
+        e.target !== document.body ||
+        isDraggingWindow ||
+        evCache.length > 1
+      ) {
         return;
+      }
       door.setPointerCapture(e.pointerId);
       isDraggingWindow = true;
 
