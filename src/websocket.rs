@@ -229,7 +229,6 @@ async fn send_new_magnets(
     shape: &Shape,
     state: &AppState,
 ) -> Result<(), FridgeError> {
-    let start = std::time::Instant::now();
     let magnets = match shape {
         Shape::Window(window) => sqlx::query_as!(
             Magnet,
@@ -273,14 +272,6 @@ async fn send_new_magnets(
         .fetch_all(&state.postgres)
         .await?,
     };
-    let time = std::time::Instant::now() - start;
-    state
-        .window_count
-        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    state.window_request_micros.fetch_add(
-        time.as_micros() as u64,
-        std::sync::atomic::Ordering::Relaxed,
-    );
 
     let buf = rmp_serde::to_vec(&MagnetUpdate::CanvasUpdate(magnets)).unwrap();
     writer.send(buf.into()).await?;
@@ -381,7 +372,7 @@ pub async fn handle_socket(
                         tracing::debug!("Received unexpected message over websocket: {thing:?}");
                     }
                     Some(Err(e)) => {
-                        tracing::error!("Websocket error: {e}");
+                        tracing::debug!("Websocket error: {e}");
                         break;
                     }
                     None => {
