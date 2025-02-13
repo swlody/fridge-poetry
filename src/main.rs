@@ -113,7 +113,6 @@ async fn broadcast_changes(
                             );
                         }
 
-                        tracing::debug!("Received postgres data, broadcasting");
                         if tx.send(magnet_update).is_err() {
                             tracing::warn!("Tried broadcasting magnet update but no receivers present.");
                         }
