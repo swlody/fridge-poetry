@@ -198,10 +198,13 @@ webSocket.onopen = () => {
 
   document.body.removeChild(document.getElementById("loader")!);
 
+  const activePointers = new Set();
+
   document.addEventListener(
     "pointerdown",
     (e) => {
-      if (e.button !== 0) return;
+      activePointers.add(e.pointerId);
+      if (!e.isPrimary || activePointers.size > 1) return;
 
       if (transitioning) {
         transitioning.style.transition = "";
@@ -231,6 +234,8 @@ webSocket.onopen = () => {
   document.addEventListener(
     "pointermove",
     (e) => {
+      if (activePointers.size > 1) return;
+
       if (clickedElement) {
         if (e.target === clickedElement.firstElementChild) {
           // show cursor when we enter the dot
@@ -271,6 +276,7 @@ webSocket.onopen = () => {
   document.addEventListener(
     "pointerup",
     (e) => {
+      activePointers.delete(e.pointerId);
       if (!isDraggingWindow) return;
       door.releasePointerCapture(e.pointerId);
       isDraggingWindow = false;
@@ -289,4 +295,8 @@ webSocket.onopen = () => {
     },
     { passive: true },
   );
+
+  document.addEventListener("touchend", (e) => {
+    e.preventDefault();
+  });
 };
