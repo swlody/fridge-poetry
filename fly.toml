@@ -16,7 +16,7 @@ internal_port = 8080
 force_https = true
 auto_stop_machines = 'suspend'
 auto_start_machines = true
-min_machines_running = 0
+min_machines_running = 1
 processes = ['app']
 
 # [[http_service.checks]]
@@ -30,4 +30,4 @@ processes = ['app']
 strategy = "canary"
 
 [[vm]]
-size = 'shared-cpu-1x'
+size = 'shared-cpu-2x'
