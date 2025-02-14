@@ -119,9 +119,11 @@ function setupEventListeners(element: HTMLElement, webSocket: WebSocket) {
 
         element.style.zIndex = "2147483647";
 
+        // offset from corner of magnet
         clickOffsetX = e.clientX / scale - element.offsetLeft;
         clickOffsetY = e.clientY / scale - element.offsetTop;
 
+        // original x,y of magnet
         originalX = parseInt(element.style.getPropertyValue("--local-x"));
         originalY = parseInt(element.style.getPropertyValue("--local-y"));
       }
@@ -139,8 +141,10 @@ function setupEventListeners(element: HTMLElement, webSocket: WebSocket) {
 
         hasChanged = true;
 
-        newX = originalX + e.clientX / scale - clickOffsetX;
-        newY = originalY + e.clientY / scale - clickOffsetY;
+        newX = originalX + (e.clientX - globalThis.innerWidth) / scale -
+          clickOffsetX;
+        newY = originalY + (e.clientY - globalThis.innerHeight) / scale -
+          clickOffsetY;
 
         requestAnimationFrame(() => {
           element.style.setProperty("--local-x", `${Math.round(newX)}px`);

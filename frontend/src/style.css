@@ -3,8 +3,8 @@ body {
 }
 
 #door {
-  --canvas-x: 0px;
-  --canvas-y: 0px;
+  --center-x: 0px;
+  --center-y: 0px;
   --scale: 1;
   width: 200vw;
   height: 200vh;
@@ -13,7 +13,7 @@ body {
   position: absolute;
   /* outline: 2px solid red; */
   background-image: url("/static/background.png");
-  background-position: calc(0px - var(--canvas-x)) calc(0px - var(--canvas-y));
+  background-position: calc(0px - var(--center-x)) calc(0px - var(--center-y));
   background-size: 900px 600px;
   background-repeat: repeat;
   transform: scale(var(--scale));
@@ -25,12 +25,14 @@ body {
 
 .magnet {
   transform: translate3d(
-      calc(var(--local-x) - var(--canvas-x)),
-      calc(var(--local-y) - var(--canvas-y)),
+      calc(var(--local-x) - var(--center-x)),
+      calc(var(--local-y) - var(--center-y)),
       0
     )
     rotate(var(--rotation));
   position: absolute;
+  left: 50%;
+  top: 50%;
   border: 1px solid black;
   display: inline-block;
   padding: 5px;
