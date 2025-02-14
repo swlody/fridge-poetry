@@ -186,13 +186,28 @@ webSocket.onopen = () => {
   let originalCenterX = 0;
   let originalCenterY = 0;
 
+  let scrollTimer: number | null = null;
+
   function makeNewHash() {
     const randomX = Math.round(Math.random() * 100000);
     const randomY = Math.round(Math.random() * 100000);
     globalThis.location.replace(`#x=${randomX}&y=${randomY}`);
   }
 
+  function startScrollTimer() {
+    if (scrollTimer !== null) {
+      clearTimeout(scrollTimer);
+    }
+    scrollTimer = setTimeout(function () {
+      updateCoordinatesFromHash();
+    }, 150);
+  }
+
   function updateCoordinatesFromHash() {
+    if (scrollTimer) {
+      clearTimeout(scrollTimer);
+    }
+
     const params = new URLSearchParams(globalThis.location.hash.slice(1));
 
     centerX = parseInt(params.get("x") || "NaN");
@@ -207,10 +222,10 @@ webSocket.onopen = () => {
 
     // request magnets within the bounds of our new window
     viewWindow = new Window(
-      Math.round(centerX - (1.5 * globalThis.innerWidth) / scale),
-      Math.round(centerY - (1.5 * globalThis.innerHeight) / scale),
-      Math.round(centerX + (1.5 * globalThis.innerWidth) / scale),
-      Math.round(centerY + (1.5 * globalThis.innerHeight) / scale),
+      Math.round(centerX - (1.5 * globalThis.innerWidth) / scale - 15),
+      Math.round(centerY - (1.5 * globalThis.innerHeight) / scale - 15),
+      Math.round(centerX + (1.5 * globalThis.innerWidth) / scale + 15),
+      Math.round(centerY + (1.5 * globalThis.innerHeight) / scale + 15),
     );
 
     webSocket.send(viewWindow.pack(hasScaled));
@@ -282,7 +297,9 @@ webSocket.onopen = () => {
         if (prevDiff > 0) {
           scale += (curDiff - prevDiff) / 500;
           scale = Math.min(Math.max(0.5, scale), 1.5);
+          hasScaled = true;
           requestAnimationFrame(() => {
+            startScrollTimer();
             door.style.setProperty("--scale", `${scale}`);
           });
         }
@@ -349,6 +366,8 @@ webSocket.onopen = () => {
       hasScaled = true;
       requestAnimationFrame(() => {
         door.style.setProperty("--scale", `${scale}`);
+
+        startScrollTimer();
       });
     },
     { passive: true },
