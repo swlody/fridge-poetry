@@ -182,15 +182,18 @@ webSocket.onopen = () => {
     canvasX = Math.round(centerX - globalThis.innerWidth / 2);
     canvasY = Math.round(-centerY - globalThis.innerHeight / 2);
 
-    document.documentElement.style.setProperty("--canvas-x", `${canvasX}px`);
-    document.documentElement.style.setProperty("--canvas-y", `${canvasY}px`);
+    door.style.setProperty("--canvas-x", `${canvasX}px`);
+    door.style.setProperty("--canvas-y", `${canvasY}px`);
 
     viewWindow = new Window(
-      Math.round(canvasX - globalThis.innerWidth / scale),
-      Math.round(canvasY - globalThis.innerHeight / scale),
-      Math.round(canvasX + (2 * globalThis.innerWidth) / scale),
-      Math.round(canvasY + (2 * globalThis.innerHeight) / scale),
+      Math.round(canvasX - globalThis.innerWidth),
+      Math.round(canvasY - globalThis.innerHeight),
+      Math.round(canvasX + (2 * globalThis.innerWidth)),
+      Math.round(canvasY + (2 * globalThis.innerHeight)),
     );
+
+    console.log(globalThis.innerWidth + " x " + globalThis.innerHeight);
+    console.log(viewWindow);
 
     webSocket.send(viewWindow.pack(true));
     hasScaled = false;
@@ -269,7 +272,7 @@ webSocket.onopen = () => {
           scale += (curDiff - prevDiff) / 500;
           scale = Math.min(Math.max(0.5, scale), 1.5);
           requestAnimationFrame(() => {
-            document.documentElement.style.setProperty("--scale", `${scale}`);
+            door.style.setProperty("--scale", `${scale}`);
           });
         }
 
@@ -279,11 +282,11 @@ webSocket.onopen = () => {
         canvasY = Math.floor(clickOffsetY - e.clientY / scale);
 
         requestAnimationFrame(() => {
-          document.documentElement.style.setProperty(
+          door.style.setProperty(
             "--canvas-x",
             `${canvasX}px`,
           );
-          document.documentElement.style.setProperty(
+          door.style.setProperty(
             "--canvas-y",
             `${canvasY}px`,
           );
@@ -339,7 +342,7 @@ webSocket.onopen = () => {
       scale = Math.min(Math.max(0.5, scale), 1.5);
       hasScaled = true;
       requestAnimationFrame(() => {
-        document.documentElement.style.setProperty("--scale", `${scale}`);
+        door.style.setProperty("--scale", `${scale}`);
       });
     },
     { passive: true },
