@@ -8,116 +8,13 @@ use tokio_tungstenite::{tungstenite, tungstenite::Message, WebSocketStream};
 use uuid::Uuid;
 
 use crate::{
+    geometry::{Shape, Window},
     state::{AppState, PgMagnetUpdate},
     FridgeError,
 };
 
 type WsStream = SplitStream<WebSocketStream<TcpStream>>;
 type WsSink = SplitSink<WebSocketStream<TcpStream>, tungstenite::Message>;
-
-#[derive(Clone, Debug)]
-struct Point {
-    x: i32,
-    y: i32,
-}
-
-#[derive(Debug)]
-struct Polygon {
-    p1: Point,
-    p2: Point,
-    p3: Point,
-    p4: Point,
-    p5: Point,
-    p6: Point,
-}
-
-#[derive(Debug)]
-enum Shape {
-    Window(Window),
-    Polygon(Polygon),
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, Default)]
-struct Window {
-    x1: i32,
-    y1: i32,
-    x2: i32,
-    y2: i32,
-}
-
-impl Window {
-    #[tracing::instrument]
-    fn contains(&self, x: i32, y: i32) -> bool {
-        x >= self.x1 && x <= self.x2 && y >= self.y1 && y <= self.y2
-    }
-
-    #[tracing::instrument]
-    fn difference(&self, other: &Window) -> Option<Shape> {
-        if self.x1 == other.x1 && self.x2 == other.x2 && self.y1 == other.y1 && self.y2 == other.y2
-        {
-            return None;
-        }
-
-        if self.x2 <= other.x1 || self.x1 >= other.x2 || self.y2 <= other.y1 || self.y1 >= other.y2
-        {
-            return Some(Shape::Window(other.clone()));
-        }
-
-        if other.x1 <= self.x1 && other.x2 >= self.x2 && other.y1 <= self.y1 && other.y2 >= self.y2
-        {
-            return Some(Shape::Window(other.clone()));
-        }
-
-        if self.x1 <= other.x1 && self.x2 >= other.x2 && self.y1 <= other.y1 && self.y2 >= other.y2
-        {
-            return Some(Shape::Window(other.clone()));
-        }
-
-        if self.x1 == other.x1 && self.x2 == other.x2 {
-            return Some(Shape::Window(Window {
-                x1: other.x1,
-                x2: other.x2,
-                y1: self.y2.min(other.y1),
-                y2: self.y2.max(other.y2),
-            }));
-        }
-        if self.y1 == other.y1 && self.y2 == other.y2 {
-            return Some(Shape::Window(Window {
-                x1: self.x2.min(other.x1),
-                x2: self.x2.max(other.x2),
-                y1: other.y1,
-                y2: other.y2,
-            }));
-        }
-
-        Some(Shape::Polygon(Polygon {
-            p1: Point {
-                x: other.x1,
-                y: other.y1,
-            },
-            p2: Point {
-                x: other.x2,
-                y: other.y1,
-            },
-            p3: Point {
-                x: other.x2,
-                y: self.y2,
-            },
-            p4: Point {
-                x: self.x2,
-                y: self.y2,
-            },
-            p5: Point {
-                x: self.x2,
-                y: other.y2,
-            },
-            p6: Point {
-                x: other.x1,
-                y: other.y2,
-            },
-        }))
-    }
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Magnet {
@@ -155,7 +52,6 @@ struct ClientMagnetUpdate {
     y: i32,
     rotation: i32,
 }
-
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum ClientUpdate {
@@ -331,13 +227,7 @@ pub async fn handle_socket(
                             match client_update {
                                 ClientUpdate::Window(window_update) => {
                                     let difference = client_window.difference(&window_update);
-
-                                    client_window = Window {
-                                        x1: window_update.x1,
-                                        y1: window_update.y1,
-                                        x2: window_update.x2,
-                                        y2: window_update.y2
-                                    };
+                                    client_window = window_update.clone();
 
                                     if let Some(difference) = difference {
                                         match send_new_magnets(&mut writer, &difference, &state).await {
