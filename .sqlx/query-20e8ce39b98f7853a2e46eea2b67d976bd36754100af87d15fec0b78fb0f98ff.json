@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, coords[0]::int AS \"x!\", coords[1]::int AS \"y!\", rotation, word, z_index\n                FROM magnets\n                WHERE coords <@ Box(Point($1::int, $2::int), Point($3::int, $4::int))",
+  "query": "SELECT id, coords[0]::int AS \"x!\", coords[1]::int AS \"y!\", rotation, word, z_index\n                    FROM magnets\n                    WHERE coords <@ Box(Point($1::int, $2::int), Point($3::int, $4::int))",
   "describe": {
     "columns": [
       {
@@ -51,5 +51,5 @@
       false
     ]
   },
-  "hash": "48ffaf2fde7fdadc7e1323344adf48140a33a11a1d3417b0e5b48318d7ebbd99"
+  "hash": "20e8ce39b98f7853a2e46eea2b67d976bd36754100af87d15fec0b78fb0f98ff"
 }

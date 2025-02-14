@@ -1,14 +1,11 @@
-:root {
-  --canvas-x: 0px;
-  --canvas-y: 0px;
-  --scale: 1;
-}
-
 body {
   overflow: hidden;
 }
 
 #door {
+  --canvas-x: 0px;
+  --canvas-y: 0px;
+  --scale: 1;
   width: 200vw;
   height: 200vh;
   left: -50vw;

@@ -52,90 +52,69 @@ impl Window {
 
     #[tracing::instrument]
     fn difference(&self, other: &Window) -> Option<Shape> {
-        // Check if there's no intersection
-        if self.x2 <= other.x1 || other.x2 <= self.x1 || self.y2 <= other.y1 || other.y2 <= self.y1
-        {
-            // Return other as a Shape::Window since there's no intersection
-            return Some(Shape::Window(other.clone()));
-        }
-
-        // Check if other is completely contained within self
-        if self.x1 <= other.x1 && other.x2 <= self.x2 && self.y1 <= other.y1 && other.y2 <= self.y2
+        if self.x1 == other.x1 && self.x2 == other.x2 && self.y1 == other.y1 && self.y2 == other.y2
         {
             return None;
         }
 
-        // Collect points for the resulting polygon
-        let mut points = Vec::new();
-
-        // Helper function to add points only if they're not in self
-        let mut add_point = |x: i32, y: i32| {
-            if !self.contains(x, y) {
-                points.push(Point { x, y });
-            }
-        };
-
-        // Add all corner points of other
-        add_point(other.x1, other.y1); // Top-left
-        add_point(other.x2, other.y1); // Top-right
-        add_point(other.x2, other.y2); // Bottom-right
-        add_point(other.x1, other.y2); // Bottom-left
-
-        // Add intersection points if they exist
-        if self.y1 > other.y1 && other.x1 < self.x1 && self.x1 < other.x2 {
-            points.push(Point {
-                x: self.x1,
-                y: self.y1,
-            });
-        }
-        if self.y1 > other.y1 && other.x1 < self.x2 && self.x2 < other.x2 {
-            points.push(Point {
-                x: self.x2,
-                y: self.y1,
-            });
-        }
-        if self.y2 < other.y2 && other.x1 < self.x1 && self.x1 < other.x2 {
-            points.push(Point {
-                x: self.x1,
-                y: self.y2,
-            });
-        }
-        if self.y2 < other.y2 && other.x1 < self.x2 && self.x2 < other.x2 {
-            points.push(Point {
-                x: self.x2,
-                y: self.y2,
-            });
+        if self.x2 <= other.x1 || self.x1 >= other.x2 || self.y2 <= other.y1 || self.y1 >= other.y2
+        {
+            return Some(Shape::Window(other.clone()));
         }
 
-        #[allow(clippy::len_zero)]
-        if points.len() == 0 {
-            tracing::error!("you dumbass");
+        if other.x1 <= self.x1 && other.x2 >= self.x2 && other.y1 <= self.y1 && other.y2 >= self.y2
+        {
+            return Some(Shape::Window(other.clone()));
         }
 
-        // Sort points clockwise
-        let center_x = points.iter().map(|p| p.x).sum::<i32>() / points.len() as i32;
-        let center_y = points.iter().map(|p| p.y).sum::<i32>() / points.len() as i32;
-
-        points.sort_by(|a, b| {
-            let angle_a = -((a.y - center_y) as f64).atan2((a.x - center_x) as f64);
-            let angle_b = -((b.y - center_y) as f64).atan2((b.x - center_x) as f64);
-            angle_a.partial_cmp(&angle_b).unwrap()
-        });
-
-        // Ensure we have exactly 6 points (pad with the last point if necessary)
-        while points.len() < 6 {
-            points.push(points.last().unwrap().clone());
+        if self.x1 <= other.x1 && self.x2 >= other.x2 && self.y1 <= other.y1 && self.y2 >= other.y2
+        {
+            return Some(Shape::Window(other.clone()));
         }
 
-        // TODO reduce polygon to box if motion is purely lateral
-        // Create the polygon with exactly 6 points
+        // Lateral or vertical movement cases
+        if self.x1 == other.x1 && self.x2 == other.x2 {
+            return Some(Shape::Window(Window {
+                x1: other.x1,
+                x2: other.x2,
+                y1: self.y2.min(other.y1),
+                y2: self.y2.max(other.y2),
+            }));
+        }
+        if self.y1 == other.y1 && self.y2 == other.y2 {
+            return Some(Shape::Window(Window {
+                x1: self.x2.min(other.x1),
+                x2: self.x2.max(other.x2),
+                y1: other.y1,
+                y2: other.y2,
+            }));
+        }
+
         Some(Shape::Polygon(Polygon {
-            p1: points[0].clone(),
-            p2: points[1].clone(),
-            p3: points[2].clone(),
-            p4: points[3].clone(),
-            p5: points[4].clone(),
-            p6: points[5].clone(),
+            p1: Point {
+                x: other.x1,
+                y: other.y1,
+            },
+            p2: Point {
+                x: other.x2,
+                y: other.y1,
+            },
+            p3: Point {
+                x: other.x2,
+                y: self.y2,
+            },
+            p4: Point {
+                x: self.x2,
+                y: self.y2,
+            },
+            p5: Point {
+                x: self.x2,
+                y: other.y2,
+            },
+            p6: Point {
+                x: other.x1,
+                y: other.y2,
+            },
         }))
     }
 }
@@ -243,18 +222,21 @@ async fn send_new_magnets(
     state: &AppState,
 ) -> Result<(), FridgeError> {
     let magnets = match shape {
-        Shape::Window(window) => sqlx::query_as!(
-            Magnet,
-            r#"SELECT id, coords[0]::int AS "x!", coords[1]::int AS "y!", rotation, word, z_index
-                FROM magnets
-                WHERE coords <@ Box(Point($1::int, $2::int), Point($3::int, $4::int))"#,
-            window.x1,
-            window.y1,
-            window.x2,
-            window.y2
-        )
-        .fetch_all(&state.postgres)
-        .await?,
+        Shape::Window(window) => {
+            tracing::debug!("Window");
+            sqlx::query_as!(
+                Magnet,
+                r#"SELECT id, coords[0]::int AS "x!", coords[1]::int AS "y!", rotation, word, z_index
+                    FROM magnets
+                    WHERE coords <@ Box(Point($1::int, $2::int), Point($3::int, $4::int))"#,
+                window.x1,
+                window.y1,
+                window.x2,
+                window.y2
+            )
+            .fetch_all(&state.postgres)
+            .await?
+        }
 
         // what the fuck
         Shape::Polygon(polygon) => sqlx::query_as!(
@@ -355,6 +337,7 @@ pub async fn handle_socket(
                             match client_update {
                                 ClientUpdate::Window(window_update) => {
                                     let difference = if window_update.has_scaled {
+                                        tracing::debug!("Window: {window_update:?}");
                                         Some(Shape::Window(Window {
                                             x1: window_update.x1,
                                             y1: window_update.y1,
