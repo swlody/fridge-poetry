@@ -149,25 +149,17 @@ enum MagnetUpdate {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct ClientMagnetUpdate {
+    is_magnet_update: bool,
     id: i32,
     x: i32,
     y: i32,
     rotation: i32,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct WindowUpdate {
-    has_scaled: bool,
-    x1: i32,
-    y1: i32,
-    x2: i32,
-    y2: i32,
-}
-
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum ClientUpdate {
-    Window(WindowUpdate),
+    Window(Window),
     Magnet(ClientMagnetUpdate),
 }
 
@@ -227,21 +219,18 @@ async fn send_new_magnets(
     state: &AppState,
 ) -> Result<(), FridgeError> {
     let magnets = match shape {
-        Shape::Window(window) => {
-            tracing::debug!("Window");
-            sqlx::query_as!(
-                Magnet,
-                r#"SELECT id, coords[0]::int AS "x!", coords[1]::int AS "y!", rotation, word, z_index
+        Shape::Window(window) => sqlx::query_as!(
+            Magnet,
+            r#"SELECT id, coords[0]::int AS "x!", coords[1]::int AS "y!", rotation, word, z_index
                     FROM magnets
                     WHERE coords <@ Box(Point($1::int, $2::int), Point($3::int, $4::int))"#,
-                window.x1,
-                window.y1,
-                window.x2,
-                window.y2
-            )
-            .fetch_all(&state.postgres)
-            .await?
-        }
+            window.x1,
+            window.y1,
+            window.x2,
+            window.y2
+        )
+        .fetch_all(&state.postgres)
+        .await?,
 
         // what the fuck
         Shape::Polygon(polygon) => sqlx::query_as!(
@@ -341,22 +330,7 @@ pub async fn handle_socket(
                         if let Ok(client_update) = rmp_serde::from_slice(&bytes) {
                             match client_update {
                                 ClientUpdate::Window(window_update) => {
-                                    let difference = if window_update.has_scaled {
-                                        tracing::debug!("Window: {window_update:?}");
-                                        Some(Shape::Window(Window {
-                                            x1: window_update.x1,
-                                            y1: window_update.y1,
-                                            x2: window_update.x2,
-                                            y2: window_update.y2
-                                        }))
-                                    } else {
-                                        client_window.difference(&Window {
-                                            x1: window_update.x1,
-                                            y1: window_update.y1,
-                                            x2: window_update.x2,
-                                            y2: window_update.y2
-                                        })
-                                    };
+                                    let difference = client_window.difference(&window_update);
 
                                     client_window = Window {
                                         x1: window_update.x1,
