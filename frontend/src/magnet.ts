@@ -141,9 +141,13 @@ function setupEventListeners(element: HTMLElement, webSocket: WebSocket) {
 
         hasChanged = true;
 
-        newX = originalX + (e.clientX - globalThis.innerWidth) / scale -
+        newX =
+          originalX +
+          (e.clientX - globalThis.innerWidth) / scale -
           clickOffsetX;
-        newY = originalY + (e.clientY - globalThis.innerHeight) / scale -
+        newY =
+          originalY +
+          (e.clientY - globalThis.innerHeight) / scale -
           clickOffsetY;
 
         requestAnimationFrame(() => {
