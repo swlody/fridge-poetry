@@ -161,9 +161,6 @@ webSocket.onopen = () => {
   }
   hasAlreadyOpened = true;
 
-  let canvasX: number;
-  let canvasY: number;
-
   let isDraggingWindow = false;
 
   let clickOffsetX = 0;
@@ -177,19 +174,16 @@ webSocket.onopen = () => {
   function updateCoordinatesFromHash() {
     const params = new URLSearchParams(globalThis.location.hash.slice(1));
     centerX = parseInt(params.get("x") ?? "0");
-    centerY = parseInt(params.get("y") ?? "0");
+    centerY = -parseInt(params.get("y") ?? "0");
 
-    canvasX = Math.round(centerX - globalThis.innerWidth / 2);
-    canvasY = Math.round(-centerY - globalThis.innerHeight / 2);
-
-    door.style.setProperty("--canvas-x", `${canvasX}px`);
-    door.style.setProperty("--canvas-y", `${canvasY}px`);
+    door.style.setProperty("--center-x", `${centerX}px`);
+    door.style.setProperty("--center-y", `${centerY}px`);
 
     viewWindow = new Window(
-      Math.round(canvasX - globalThis.innerWidth),
-      Math.round(canvasY - globalThis.innerHeight),
-      Math.round(canvasX + (2 * globalThis.innerWidth)),
-      Math.round(canvasY + (2 * globalThis.innerHeight)),
+      Math.round(centerX - 1.5 * globalThis.innerWidth),
+      Math.round(centerY - 1.5 * globalThis.innerHeight),
+      Math.round(centerX + 1.5 * globalThis.innerWidth),
+      Math.round(centerY + 1.5 * globalThis.innerHeight),
     );
 
     console.log(globalThis.innerWidth + " x " + globalThis.innerHeight);
@@ -247,8 +241,8 @@ webSocket.onopen = () => {
       door.setPointerCapture(e.pointerId);
       isDraggingWindow = true;
 
-      clickOffsetX = canvasX + e.clientX / scale;
-      clickOffsetY = canvasY + e.clientY / scale;
+      clickOffsetX = centerX + (e.clientX - globalThis.innerWidth / 2) / scale;
+      clickOffsetY = centerY + (e.clientY - globalThis.innerHeight / 2) / scale;
     },
     { passive: true },
   );
@@ -278,17 +272,21 @@ webSocket.onopen = () => {
 
         prevDiff = curDiff;
       } else if (evCache.length === 1 && isDraggingWindow) {
-        canvasX = Math.floor(clickOffsetX - e.clientX / scale);
-        canvasY = Math.floor(clickOffsetY - e.clientY / scale);
+        centerX = Math.floor(
+          clickOffsetX - (e.clientX - globalThis.innerWidth / 2) / scale,
+        );
+        centerY = Math.floor(
+          clickOffsetY - (e.clientY - globalThis.innerHeight / 2) / scale,
+        );
 
         requestAnimationFrame(() => {
           door.style.setProperty(
-            "--canvas-x",
-            `${canvasX}px`,
+            "--center-x",
+            `${centerX}px`,
           );
           door.style.setProperty(
-            "--canvas-y",
-            `${canvasY}px`,
+            "--center-y",
+            `${centerY}px`,
           );
         });
       }
@@ -312,11 +310,13 @@ webSocket.onopen = () => {
       door.releasePointerCapture(e.pointerId);
       isDraggingWindow = false;
 
-      const newCenterX = canvasX + globalThis.innerWidth / 2;
-      const newCenterY = -(canvasY + globalThis.innerHeight / 2);
+      const newCenterX = centerX;
+      const newCenterY = -centerY;
 
       const xDiff = Math.abs(centerX - newCenterX);
       const yDiff = Math.abs(centerY - newCenterY);
+
+      console.log("mouse moved " + xDiff + "x, " + yDiff + "y");
 
       if (xDiff >= 1.0 || yDiff >= 1.0) {
         globalThis.location.replace(
