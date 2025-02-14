@@ -47,6 +47,7 @@ webSocket.onerror = (err) => {
 };
 
 // TODO check reconnect logic
+// TODO kick people off after some idle time and reconnect on interaction
 webSocket.onclose = () => {
   while (!webSocket.OPEN) {
     setTimeout(() => {
@@ -58,6 +59,66 @@ webSocket.onclose = () => {
 // Elements that are currently in a transition animation
 // because it was moved by someone else...
 const transitioning = new Map<number, HTMLElement>();
+
+function chooseRandomEdgeCoords() {
+  let x = 0;
+  let y = 0;
+  const rand = Math.random();
+  if (rand < 0.25) {
+    x = viewWindow.x1;
+    y =
+      Math.floor(Math.random() * (viewWindow.y2 - viewWindow.y1 + 1)) +
+      viewWindow.y2;
+  } else if (rand < 0.5) {
+    x = viewWindow.x2;
+    y =
+      Math.floor(Math.random() * (viewWindow.y2 - viewWindow.y1 + 1)) +
+      viewWindow.y2;
+  } else if (rand < 0.75) {
+    y = viewWindow.y1;
+    x =
+      Math.floor(Math.random() * (viewWindow.x2 - viewWindow.x1 + 1)) +
+      viewWindow.x2;
+  } else {
+    y = viewWindow.y2;
+    x =
+      Math.floor(Math.random() * (viewWindow.x2 - viewWindow.x1 + 1)) +
+      viewWindow.x2;
+  }
+
+  return [x, y];
+}
+
+function transitionElement(
+  element: HTMLElement,
+  registerTimout: boolean,
+  x: number,
+  y: number,
+  rotation: number | null = null,
+  zIndex: number | null = null,
+) {
+  const id = parseInt(element.id);
+  element.style.transition = "0.5s";
+  element.style.setProperty("--x", `${x}px`);
+  element.style.setProperty("--y", `${y}px`);
+
+  if (rotation) {
+    element.style.setProperty("--rotation", `${rotation}deg`);
+  }
+  if (zIndex) {
+    element.style.zIndex = zIndex.toString();
+  }
+
+  if (registerTimout) {
+    transitioning.set(id, element);
+    setTimeout(() => {
+      if (transitioning.has(id)) {
+        element.style.transition = "";
+        transitioning.delete(id);
+      }
+    }, 500);
+  }
+}
 
 // TODO consider race conditions between this and mouseup replaceMagnets
 // We receive an update to a magnet within our window
@@ -75,40 +136,47 @@ webSocket.onmessage = async (e) => {
     replaceMagnets(magnets);
   } else if (update[5] !== undefined) {
     // New object arriving from out of bounds, create it
-    // TODO transition from edge of screen
-    door.append(
-      new Magnet(
-        update[0],
-        update[1],
-        update[2],
-        update[3],
-        update[4],
-        update[5],
-      ).toElement(webSocket),
-    );
+    const [x, y] = chooseRandomEdgeCoords();
+
+    const element = new Magnet(
+      update[0],
+      x,
+      y,
+      update[3],
+      update[4],
+      update[5],
+    ).toElement(webSocket);
+
+    requestAnimationFrame(() => {
+      door.append(element);
+
+      requestAnimationFrame(() => {
+        transitionElement(element, true, update[1], update[2]);
+      });
+    });
   } else if (update[4] !== undefined) {
     // Received update for magnet within our window
     const element = document.getElementById(`${update[0]}`)!;
 
-    element.style.transition = "0.5s";
-    transitioning.set(update[0], element);
-
-    // Object is moving within bounds, update its values
-    element.style.setProperty("--x", `${update[1]}px`);
-    element.style.setProperty("--y", `${update[2]}px`);
-    element.style.setProperty("--rotation", `${update[3]}deg`);
-    element.style.zIndex = update[4].toString();
-
-    setTimeout(() => {
-      if (transitioning.has(update[0])) {
-        element.style.transition = "";
-        transitioning.delete(update[0]);
-      }
-    }, 500);
+    transitionElement(
+      element,
+      true,
+      update[1],
+      update[2],
+      update[3],
+      update[4],
+    );
   } else if (update && update.length !== 0) {
     // Received indication that magnet was removed from our window
     const element = document.getElementById(`${update}`)!;
-    door.removeChild(element);
+
+    const [x, y] = chooseRandomEdgeCoords();
+
+    transitionElement(element, false, x, y);
+
+    setTimeout(() => {
+      door.removeChild(element);
+    }, 500);
   }
 };
 
