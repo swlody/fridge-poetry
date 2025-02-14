@@ -5,6 +5,8 @@ import { scale } from "./main.ts";
 export let clickedElement: HTMLElement | null = null;
 export let isDraggingMagnet = false;
 
+const magnetTemplate = document.getElementById("magnet") as HTMLTemplateElement;
+
 export class Magnet {
   id: number;
   x: number;
@@ -30,19 +32,19 @@ export class Magnet {
   }
 
   toElement(webSocket: WebSocket): HTMLElement {
-    const element = document.createElement("div");
-    element.className = "magnet";
-    element.id = String(this.id);
-    element.style.setProperty("--local-x", `${this.x}px`);
-    element.style.setProperty("--local-y", `${this.y}px`);
+    const element = (magnetTemplate.content.cloneNode(true) as DocumentFragment)
+      .firstElementChild as HTMLElement;
+
+    element.id = this.id.toString();
+
+    element.style.setProperty("--x", `${this.x}px`);
+    element.style.setProperty("--y", `${this.y}px`);
     element.style.setProperty("--rotation", `${this.rotation}deg`);
-    element.style.zIndex = String(this.zIndex);
-    element.innerHTML = `<div hidden class="rotate-dot">
-    </div><div hidden class="rotate-link"></div>
-    ${this.word}`;
+    element.style.zIndex = this.zIndex.toString();
+
+    element.insertAdjacentText("beforeend", this.word);
 
     setupEventListeners(element, webSocket);
-
     return element;
   }
 }
@@ -75,8 +77,8 @@ function packedMagnetUpdate(
 }
 
 function setupEventListeners(element: HTMLElement, webSocket: WebSocket) {
-  let clickOffsetX = 0;
-  let clickOffsetY = 0;
+  let startX = 0;
+  let startY = 0;
 
   let originalX = 0;
   let originalY = 0;
@@ -119,13 +121,12 @@ function setupEventListeners(element: HTMLElement, webSocket: WebSocket) {
 
         element.style.zIndex = "2147483647";
 
-        // offset from corner of magnet
-        clickOffsetX = e.clientX / scale - element.offsetLeft;
-        clickOffsetY = e.clientY / scale - element.offsetTop;
-
         // original x,y of magnet
-        originalX = parseInt(element.style.getPropertyValue("--local-x"));
-        originalY = parseInt(element.style.getPropertyValue("--local-y"));
+        originalX = parseInt(element.style.getPropertyValue("--x"));
+        originalY = parseInt(element.style.getPropertyValue("--y"));
+
+        startX = e.clientX / scale - originalX;
+        startY = e.clientY / scale - originalY;
       }
     },
     { passive: true },
@@ -141,18 +142,12 @@ function setupEventListeners(element: HTMLElement, webSocket: WebSocket) {
 
         hasChanged = true;
 
-        newX =
-          originalX +
-          (e.clientX - globalThis.innerWidth) / scale -
-          clickOffsetX;
-        newY =
-          originalY +
-          (e.clientY - globalThis.innerHeight) / scale -
-          clickOffsetY;
+        newX = e.clientX / scale - startX;
+        newY = e.clientY / scale - startY;
 
         requestAnimationFrame(() => {
-          element.style.setProperty("--local-x", `${Math.round(newX)}px`);
-          element.style.setProperty("--local-y", `${Math.round(newY)}px`);
+          element.style.setProperty("--x", `${Math.round(newX)}px`);
+          element.style.setProperty("--y", `${Math.round(newY)}px`);
         });
       } else if (rotating) {
         const currentAngle = getAngle(element, e.clientX, e.clientY);
@@ -181,6 +176,8 @@ function setupEventListeners(element: HTMLElement, webSocket: WebSocket) {
         isDragging = false;
         isDraggingMagnet = false;
 
+        // I frankly don't understand why the hasChanged check is necessary
+        // but if it's not there the magnet jumps far away when it is clicked
         if (
           !hasChanged ||
           (Math.abs(newX - originalX) < 0.5 && Math.abs(newY - originalY) < 0.5)
@@ -206,8 +203,8 @@ function setupEventListeners(element: HTMLElement, webSocket: WebSocket) {
 
         const magnetUpdate = packedMagnetUpdate(
           parseInt(element.id),
-          parseInt(element.style.getPropertyValue("--local-x")),
-          parseInt(element.style.getPropertyValue("--local-y")),
+          parseInt(element.style.getPropertyValue("--x")),
+          parseInt(element.style.getPropertyValue("--y")),
           parseInt(element.style.getPropertyValue("--rotation")),
         );
 

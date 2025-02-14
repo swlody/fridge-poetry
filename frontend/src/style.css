@@ -24,9 +24,12 @@ body {
 }
 
 .magnet {
+  --x: 0px;
+  --y: 0px;
+  --rotation: 0deg;
   transform: translate3d(
-      calc(var(--local-x) - var(--center-x)),
-      calc(var(--local-y) - var(--center-y)),
+      calc(var(--x) - var(--center-x)),
+      calc(var(--y) - var(--center-y)),
       0
     )
     rotate(var(--rotation));
@@ -34,10 +37,8 @@ body {
   left: 50%;
   top: 50%;
   border: 1px solid black;
-  display: inline-block;
   padding: 5px;
   font-family: Georgia, "Times New Roman", Times, serif;
-  --rotation: 0deg;
   box-shadow: calc(4px * cos(45deg - var(--rotation)))
     calc(4px * sin(45deg - var(--rotation))) 2px rgba(0, 0, 0, 0.6);
   user-select: none;
@@ -94,12 +95,16 @@ body {
   border: none;
 }
 
+#about-dialog {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 #about-button {
   position: absolute;
   bottom: 0;
   right: 0;
   margin: 10px;
-  z-index: 2147483647;
 }
 
 #about-button:hover {
