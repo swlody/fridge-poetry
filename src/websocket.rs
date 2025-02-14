@@ -166,7 +166,7 @@ async fn send_new_magnets(
 #[tracing::instrument]
 async fn update_magnet(
     update: ClientMagnetUpdate,
-    session_id: Uuid,
+    session_id: &Uuid,
     state: &AppState,
 ) -> Result<(), FridgeError> {
     // TODO coherence checks: inside area bounds and rotation within correct range
@@ -182,6 +182,51 @@ async fn update_magnet(
     )
     .execute(&state.postgres)
     .await?;
+
+    Ok(())
+}
+
+#[tracing::instrument]
+async fn handle_websocket_binary(
+    bytes: tokio_tungstenite::tungstenite::Bytes,
+    client_window: &mut Window,
+    mut writer: &mut WsSink,
+    state: &AppState,
+    session_id: &Uuid,
+) -> Result<(), ()> {
+    let Ok(client_update) = rmp_serde::from_slice(&bytes) else {
+        tracing::debug!("Received unknown msgpack");
+        return Ok(());
+    };
+
+    match client_update {
+        ClientUpdate::Window(window_update) => {
+            let difference = client_window.difference(&window_update);
+            *client_window = window_update.clone();
+
+            let Some(difference) = difference else {
+                return Ok(());
+            };
+
+            match send_new_magnets(&mut writer, &difference, &state).await {
+                Ok(()) => {}
+                Err(FridgeError::Tungstenite(e)) => {
+                    tracing::debug!("Unable to send new magnets, disconnecting websocket: {e}");
+                    return Err(());
+                }
+                Err(FridgeError::Sqlx(e)) => {
+                    tracing::error!("Unable to get magnets from database: {e}");
+                }
+            }
+        }
+        ClientUpdate::Magnet(magnet_update) => {
+            if let Err(FridgeError::Sqlx(e)) =
+                update_magnet(magnet_update, session_id, &state).await
+            {
+                tracing::error!("Unable to update magnet in databse: {e}");
+            }
+        }
+    }
 
     Ok(())
 }
@@ -219,38 +264,21 @@ pub async fn handle_socket(
             }
 
             // Update to watch window from WebSocket
-            // TODO yikes... reduce nesting?
             message = reader.next() => {
                 match message {
                     Some(Ok(Message::Binary(bytes))) => {
-                        if let Ok(client_update) = rmp_serde::from_slice(&bytes) {
-                            match client_update {
-                                ClientUpdate::Window(window_update) => {
-                                    let difference = client_window.difference(&window_update);
-                                    client_window = window_update.clone();
-
-                                    if let Some(difference) = difference {
-                                        match send_new_magnets(&mut writer, &difference, &state).await {
-                                            Ok(()) => {},
-                                            Err(FridgeError::Tungstenite(e)) => {
-                                                tracing::debug!("Unable to send new magnets, disconnecting websocket: {e}");
-                                                break;
-                                            }
-                                            Err(FridgeError::Sqlx(e)) => {
-                                                tracing::error!("Unable to get magnets from database: {e}");
-                                            }
-                                        }
-                                    }
-                                }
-                                ClientUpdate::Magnet(magnet_update) => {
-                                    if let Err(FridgeError::Sqlx(e)) = update_magnet(magnet_update, session_id, &state).await {
-                                        tracing::error!("Unable to update magnet in databse: {e}");
-                                    }
-                                }
-                            }
-                        } else {
-                            tracing::debug!("Received unknown msgpack");
-                        }
+                        if handle_websocket_binary(
+                            bytes,
+                            &mut client_window,
+                            &mut writer,
+                            &state,
+                            &session_id,
+                        )
+                        .await
+                        .is_err()
+                        {
+                            break;
+                        };
                     }
                     Some(Ok(Message::Close(close))) => {
                         tracing::debug!("WebSocket closed by client: {close:?}");
