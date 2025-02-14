@@ -90,23 +90,12 @@ webSocket.onmessage = async (e) => {
     // Received update for magnet within our window
     const element = document.getElementById(`${update[0]}`)!;
 
-    const newX = `${update[1]}px`;
-    const newY = `${update[2]}px`;
-
-    // TODO this check can happen on server by comparing session_id
-    if (
-      element.style.getPropertyValue("--x") === newX &&
-      element.style.getPropertyValue("--y") === newY
-    ) {
-      return;
-    }
-
     element.style.transition = "0.5s";
     transitioning.set(update[0], element);
 
     // Object is moving within bounds, update its values
-    element.style.setProperty("--x", newX);
-    element.style.setProperty("--y", newY);
+    element.style.setProperty("--x", `${update[1]}px`);
+    element.style.setProperty("--y", `${update[2]}px`);
     element.style.setProperty("--rotation", `${update[3]}deg`);
     element.style.zIndex = update[4].toString();
 

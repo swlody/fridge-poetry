@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PgMagnetUpdate {
@@ -10,6 +11,7 @@ pub struct PgMagnetUpdate {
     pub rotation: i32,
     pub z_index: i64,
     pub word: String,
+    pub session_id: Uuid,
 }
 
 #[derive(Clone, Debug)]
