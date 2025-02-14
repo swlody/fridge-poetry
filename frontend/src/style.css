@@ -89,20 +89,16 @@ body {
   border-bottom: none;
 }
 
-#about-dialog {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  padding: 1rem;
-  transform: translate(-50%, -50%);
-  display: inline-block;
-  cursor: auto;
-  user-select: none;
-  -webkit-user-select: none;
-  z-index: 2147483647;
+[popover] {
+  background: none;
+  border: none;
 }
 
 #about-button {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  margin: 10px;
   z-index: 2147483647;
 }
 
@@ -110,15 +106,8 @@ body {
   cursor: pointer;
 }
 
-.children-hidden > * {
-  display: none;
-}
-
-footer {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  margin: 10px;
+button {
+  all: unset;
 }
 
 .loader {
