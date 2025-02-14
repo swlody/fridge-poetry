@@ -39,17 +39,6 @@ class Window {
 
 const door = document.getElementById("door")!;
 
-const dialog = document.getElementById("about-dialog")! as HTMLElement;
-document.getElementById("about-button")!.addEventListener(
-  "pointerdown",
-  (e) => {
-    e.stopPropagation();
-    dialog.hidden = !dialog.hidden;
-    dialog.classList.toggle("children-hidden");
-  },
-  { passive: true },
-);
-
 let webSocket = new WebSocket(WS_URL);
 
 webSocket.onerror = (err) => {
@@ -222,10 +211,6 @@ webSocket.onopen = () => {
       }
 
       const target = e.target as HTMLElement;
-      if (!dialog.contains(target) && !dialog.hidden) {
-        dialog.hidden = true;
-        dialog.classList.toggle("children-hidden");
-      }
 
       if (clickedElement && !clickedElement.contains(target)) {
         hideRotationDot(clickedElement);
