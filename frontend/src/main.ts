@@ -91,12 +91,23 @@ webSocket.onmessage = async (e) => {
     // Received update for magnet within our window
     const element = document.getElementById(`${update[0]}`)!;
 
+    const newX = `${update[1]}px`;
+    const newY = `${update[2]}px`;
+
+    // TODO this check can happen on server by comparing session_id
+    if (
+      element.style.getPropertyValue("--x") === newX &&
+      element.style.getPropertyValue("--y") === newY
+    ) {
+      return;
+    }
+
     element.style.transition = "0.5s";
     transitioning = element;
 
     // Object is moving within bounds, update its values
-    element.style.setProperty("--x", `${update[1]}px`);
-    element.style.setProperty("--y", `${update[2]}px`);
+    element.style.setProperty("--x", newX);
+    element.style.setProperty("--y", newY);
     element.style.setProperty("--rotation", `${update[3]}deg`);
     element.style.zIndex = update[4].toString();
 
@@ -172,38 +183,42 @@ webSocket.onopen = () => {
   let centerX = 0;
   let centerY = 0;
 
+  function makeNewHash() {
+    console.log("setting new hash");
+    const randomX = Math.round(Math.random() * 100000);
+    const randomY = Math.round(Math.random() * 100000);
+    globalThis.location.replace(`#x=${randomX}&y=${randomY}`);
+  }
+
   function updateCoordinatesFromHash() {
     const params = new URLSearchParams(globalThis.location.hash.slice(1));
     // TODO reverse x,y
     // TODO make magnet coords center coords?
-    // TODO random coords if hash is nonsense instead of 0,0
-    centerX = parseInt(params.get("x") ?? "0");
-    centerY = -parseInt(params.get("y") ?? "0");
+
+    centerX = parseInt(params.get("x") || "NaN");
+    centerY = -parseInt(params.get("y") || "NaN");
+    if (isNaN(centerX) || isNaN(centerY)) {
+      makeNewHash();
+      return;
+    }
 
     door.style.setProperty("--center-x", `${centerX}px`);
     door.style.setProperty("--center-y", `${centerY}px`);
 
     // request magnets within the bounds of our new window
     viewWindow = new Window(
-      Math.round(centerX - 1.5 * globalThis.innerWidth / scale),
-      Math.round(centerY - 1.5 * globalThis.innerHeight / scale),
-      Math.round(centerX + 1.5 * globalThis.innerWidth / scale),
-      Math.round(centerY + 1.5 * globalThis.innerHeight / scale),
+      Math.round(centerX - (1.5 * globalThis.innerWidth) / scale),
+      Math.round(centerY - (1.5 * globalThis.innerHeight) / scale),
+      Math.round(centerX + (1.5 * globalThis.innerWidth) / scale),
+      Math.round(centerY + (1.5 * globalThis.innerHeight) / scale),
     );
 
     webSocket.send(viewWindow.pack(hasScaled));
     hasScaled = false;
   }
 
-  // put user at random coordinates if they come without a hash
-  if (!globalThis.location.hash) {
-    const randomX = Math.round(Math.random() * 100000);
-    const randomY = Math.round(Math.random() * 100000);
-    globalThis.location.replace(`#x=${randomX}&y=${randomY}`);
-  }
-
-  updateCoordinatesFromHash();
   globalThis.addEventListener("hashchange", updateCoordinatesFromHash);
+  updateCoordinatesFromHash();
 
   document.body.removeChild(document.getElementById("loader")!);
 
