@@ -55,10 +55,9 @@ webSocket.onclose = () => {
   }
 };
 
-// Element that is currently in a transition animation
+// Elements that are currently in a transition animation
 // because it was moved by someone else...
-// TODO need to allow for multiple of these!! duh
-let transitioning: HTMLElement | null;
+const transitioning = new Map<number, HTMLElement>();
 
 // TODO consider race conditions between this and mouseup replaceMagnets
 // We receive an update to a magnet within our window
@@ -103,7 +102,7 @@ webSocket.onmessage = async (e) => {
     }
 
     element.style.transition = "0.5s";
-    transitioning = element;
+    transitioning.set(update[0], element);
 
     // Object is moving within bounds, update its values
     element.style.setProperty("--x", newX);
@@ -112,9 +111,9 @@ webSocket.onmessage = async (e) => {
     element.style.zIndex = update[4].toString();
 
     setTimeout(() => {
-      if (transitioning) {
+      if (transitioning.has(update[0])) {
         element.style.transition = "";
-        transitioning = null;
+        transitioning.delete(update[0]);
       }
     }, 500);
   } else if (update && update.length !== 0) {
@@ -250,10 +249,10 @@ webSocket.onopen = () => {
       evCache.push(e);
       if (evCache.length > 1) return;
 
-      if (transitioning) {
-        transitioning.style.transition = "";
-        transitioning = null;
-      }
+      transitioning.forEach((element) => {
+        element.style.transition = "";
+      });
+      transitioning.clear();
 
       const target = e.target as HTMLElement;
 
