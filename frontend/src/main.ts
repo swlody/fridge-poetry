@@ -32,8 +32,8 @@ class Window {
     return x >= this.x1 && x <= this.x2 && y >= this.y1 && y <= this.y2;
   }
 
-  pack(hasScaled: boolean) {
-    return pack([hasScaled, this.x1, this.y1, this.x2, this.y2]);
+  pack() {
+    return pack([this.x1, this.y1, this.x2, this.y2]);
   }
 }
 
@@ -219,11 +219,9 @@ function replaceMagnets(magnetArray: Magnet[]) {
 let hasAlreadyOpened = false;
 webSocket.onopen = () => {
   // if the window was rescaled before moving, request everything to avoid weirdness
-  let hasScaled = false;
 
   if (hasAlreadyOpened) {
     // Re-request the whole window in case stuff was lost while disconnected
-    hasScaled = true;
     updateCoordinatesFromHash();
     return;
   }
@@ -284,8 +282,7 @@ webSocket.onopen = () => {
       Math.round(centerY + (1.5 * globalThis.innerHeight) / scale + 15),
     );
 
-    webSocket.send(viewWindow.pack(hasScaled));
-    hasScaled = false;
+    webSocket.send(viewWindow.pack());
   }
 
   globalThis.addEventListener("hashchange", updateCoordinatesFromHash);
@@ -353,7 +350,6 @@ webSocket.onopen = () => {
         if (prevDiff > 0) {
           scale += (curDiff - prevDiff) / 500;
           scale = Math.min(Math.max(0.5, scale), 1.5);
-          hasScaled = true;
           requestAnimationFrame(() => {
             startScrollTimer();
             door.style.setProperty("--scale", `${scale}`);
@@ -419,7 +415,6 @@ webSocket.onopen = () => {
     (e) => {
       scale += e.deltaY * -0.001;
       scale = Math.min(Math.max(0.5, scale), 1.5);
-      hasScaled = true;
       requestAnimationFrame(() => {
         door.style.setProperty("--scale", `${scale}`);
 
