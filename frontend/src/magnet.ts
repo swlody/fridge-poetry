@@ -126,7 +126,7 @@ function setupEventListeners(element: HTMLElement, webSocket: WebSocket) {
         originalY = parseInt(element.style.getPropertyValue("--y"));
 
         startX = e.clientX / scale - originalX;
-        startY = e.clientY / scale - originalY;
+        startY = -e.clientY / scale - originalY;
       }
     },
     { passive: true },
@@ -143,7 +143,7 @@ function setupEventListeners(element: HTMLElement, webSocket: WebSocket) {
         hasChanged = true;
 
         newX = e.clientX / scale - startX;
-        newY = e.clientY / scale - startY;
+        newY = -e.clientY / scale - startY;
 
         requestAnimationFrame(() => {
           element.style.setProperty("--x", `${Math.round(newX)}px`);

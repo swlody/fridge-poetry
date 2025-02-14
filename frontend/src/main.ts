@@ -183,8 +183,10 @@ webSocket.onopen = () => {
   let centerX = 0;
   let centerY = 0;
 
+  let originalCenterX = 0;
+  let originalCenterY = 0;
+
   function makeNewHash() {
-    console.log("setting new hash");
     const randomX = Math.round(Math.random() * 100000);
     const randomY = Math.round(Math.random() * 100000);
     globalThis.location.replace(`#x=${randomX}&y=${randomY}`);
@@ -192,11 +194,9 @@ webSocket.onopen = () => {
 
   function updateCoordinatesFromHash() {
     const params = new URLSearchParams(globalThis.location.hash.slice(1));
-    // TODO reverse x,y
-    // TODO make magnet coords center coords?
 
     centerX = parseInt(params.get("x") || "NaN");
-    centerY = -parseInt(params.get("y") || "NaN");
+    centerY = parseInt(params.get("y") || "NaN");
     if (isNaN(centerX) || isNaN(centerY)) {
       makeNewHash();
       return;
@@ -254,9 +254,12 @@ webSocket.onopen = () => {
       door.setPointerCapture(e.pointerId);
       isDraggingWindow = true;
 
+      originalCenterX = centerX;
+      originalCenterY = centerY;
+
       // starting coordinates of mouse relative to world origin
       startingX = centerX + (e.clientX - globalThis.innerWidth / 2) / scale;
-      startingY = centerY + (e.clientY - globalThis.innerHeight / 2) / scale;
+      startingY = -centerY + (e.clientY - globalThis.innerHeight / 2) / scale;
     },
     { passive: true },
   );
@@ -289,7 +292,7 @@ webSocket.onopen = () => {
         centerX = Math.floor(
           startingX - (e.clientX - globalThis.innerWidth / 2) / scale,
         );
-        centerY = Math.floor(
+        centerY = -Math.floor(
           startingY - (e.clientY - globalThis.innerHeight / 2) / scale,
         );
 
@@ -318,17 +321,12 @@ webSocket.onopen = () => {
       door.releasePointerCapture(e.pointerId);
       isDraggingWindow = false;
 
-      const newCenterX = centerX;
-      const newCenterY = -centerY;
-
-      const xDiff = Math.abs(centerX - newCenterX);
-      const yDiff = Math.abs(centerY - newCenterY);
-
-      console.log("mouse moved " + xDiff + "x, " + yDiff + "y");
+      const xDiff = Math.abs(centerX - originalCenterX);
+      const yDiff = Math.abs(centerY - originalCenterY);
 
       if (xDiff >= 1.0 || yDiff >= 1.0) {
         globalThis.location.replace(
-          `#x=${Math.round(newCenterX)}&y=${Math.round(newCenterY)}`,
+          `#x=${Math.round(centerX)}&y=${Math.round(centerY)}`,
         );
       }
     },
