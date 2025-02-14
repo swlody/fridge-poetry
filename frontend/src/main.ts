@@ -32,8 +32,8 @@ class Window {
     return x >= this.x1 && x <= this.x2 && y >= this.y1 && y <= this.y2;
   }
 
-  pack() {
-    return pack([this.x1, this.y1, this.x2, this.y2]);
+  pack(hasScaled: boolean) {
+    return pack([hasScaled, this.x1, this.y1, this.x2, this.y2]);
   }
 }
 
@@ -172,6 +172,8 @@ webSocket.onopen = () => {
   let centerX = 0;
   let centerY = 0;
 
+  let hasScaled = false;
+
   function updateCoordinatesFromHash() {
     const params = new URLSearchParams(globalThis.location.hash.slice(1));
     centerX = parseInt(params.get("x") ?? "0");
@@ -190,7 +192,8 @@ webSocket.onopen = () => {
       Math.round(canvasY + (2 * globalThis.innerHeight) / scale),
     );
 
-    webSocket.send(viewWindow.pack());
+    webSocket.send(viewWindow.pack(hasScaled));
+    hasScaled = false;
   }
 
   if (!globalThis.location.hash) {
@@ -232,7 +235,7 @@ webSocket.onopen = () => {
       }
 
       if (
-        e.target !== document.body ||
+        e.target !== door ||
         isDraggingWindow ||
         evCache.length > 1
       ) {
@@ -334,6 +337,7 @@ webSocket.onopen = () => {
     (e) => {
       scale += e.deltaY * -0.001;
       scale = Math.min(Math.max(0.5, scale), 1.5);
+      hasScaled = true;
       requestAnimationFrame(() => {
         document.documentElement.style.setProperty("--scale", `${scale}`);
       });

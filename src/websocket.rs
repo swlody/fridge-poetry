@@ -170,17 +170,25 @@ enum MagnetUpdate {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct ClientMagnetUpdate {
-    is_magnet_update: bool,
     id: i32,
     x: i32,
     y: i32,
     rotation: i32,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct WindowUpdate {
+    has_scaled: bool,
+    x1: i32,
+    y1: i32,
+    x2: i32,
+    y2: i32,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum ClientUpdate {
-    Window(Window),
+    Window(WindowUpdate),
     Magnet(ClientMagnetUpdate),
 }
 
@@ -346,8 +354,28 @@ pub async fn handle_socket(
                         if let Ok(client_update) = rmp_serde::from_slice(&bytes) {
                             match client_update {
                                 ClientUpdate::Window(window_update) => {
-                                    let difference = client_window.difference(&window_update);
-                                    client_window = window_update;
+                                    let difference = if window_update.has_scaled {
+                                        Some(Shape::Window(Window {
+                                            x1: window_update.x1,
+                                            y1: window_update.y1,
+                                            x2: window_update.x2,
+                                            y2: window_update.y2
+                                        }))
+                                    } else {
+                                        client_window.difference(&Window {
+                                            x1: window_update.x1,
+                                            y1: window_update.y1,
+                                            x2: window_update.x2,
+                                            y2: window_update.y2
+                                        })
+                                    };
+
+                                    client_window = Window {
+                                        x1: window_update.x1,
+                                        y1: window_update.y1,
+                                        x2: window_update.x2,
+                                        y2: window_update.y2
+                                    };
 
                                     if let Some(difference) = difference {
                                         match send_new_magnets(&mut writer, &difference, &state).await {
