@@ -4,6 +4,28 @@
   --scale: 1;
 }
 
+body {
+  overflow: hidden;
+}
+
+#door {
+  width: 200vw;
+  height: 200vh;
+  left: -50vw;
+  top: -50vh;
+  position: absolute;
+  /* outline: 2px solid red; */
+  background-image: url("/static/background.png");
+  background-position: calc(0px - var(--canvas-x)) calc(0px - var(--canvas-y));
+  background-size: 900px 600px;
+  background-repeat: repeat;
+  transform: scale(var(--scale));
+}
+
+#door:active {
+  cursor: move;
+}
+
 .magnet {
   transform: translate3d(
       calc(var(--local-x) - var(--canvas-x)),
@@ -66,30 +88,6 @@
   border: 1px solid cornsilk;
   border-top: none;
   border-bottom: none;
-}
-
-body {
-  width: 100vw;
-  height: 100vh;
-  margin: 0;
-  overflow: hidden;
-  touch-action: none;
-}
-
-body:active {
-  cursor: move;
-}
-
-#door {
-  width: 100vw;
-  height: 100vh;
-  position: absolute;
-  outline: 2px solid red;
-  background-image: url("/static/background.png");
-  background-position: calc(0px - var(--canvas-x)) calc(0px - var(--canvas-y));
-  background-size: 900px 600px;
-  background-repeat: repeat;
-  transform: scale(var(--scale));
 }
 
 #about-dialog {
