@@ -46,7 +46,8 @@ struct Window {
 }
 
 impl Window {
-    const fn contains(&self, x: i32, y: i32) -> bool {
+    #[tracing::instrument]
+    fn contains(&self, x: i32, y: i32) -> bool {
         x >= self.x1 && x <= self.x2 && y >= self.y1 && y <= self.y2
     }
 
@@ -72,7 +73,6 @@ impl Window {
             return Some(Shape::Window(other.clone()));
         }
 
-        // Lateral or vertical movement cases
         if self.x1 == other.x1 && self.x2 == other.x2 {
             return Some(Shape::Window(Window {
                 x1: other.x1,

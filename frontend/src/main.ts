@@ -55,6 +55,9 @@ webSocket.onclose = () => {
   }
 };
 
+// Element that is currently in a transition animation
+// because it was moved by someone else...
+// TODO need to allow for multiple of these!! duh
 let transitioning: HTMLElement | null;
 
 // TODO consider race conditions between this and mouseup replaceMagnets
@@ -65,6 +68,7 @@ webSocket.onmessage = async (e) => {
 
   // inferring the type of the update based on structure 🤢
   if (update[0] instanceof Array) {
+    // Received list of new magnets to add to DOM
     const magnets = [];
     for (const val of update) {
       magnets.push(new Magnet(val[0], val[1], val[2], val[3], val[4], val[5]));
@@ -72,6 +76,7 @@ webSocket.onmessage = async (e) => {
     replaceMagnets(magnets);
   } else if (update[5] !== undefined) {
     // New object arriving from out of bounds, create it
+    // TODO transition from edge of screen
     door.append(
       new Magnet(
         update[0],
@@ -90,8 +95,8 @@ webSocket.onmessage = async (e) => {
     transitioning = element;
 
     // Object is moving within bounds, update its values
-    element.style.setProperty("--local-x", `${update[1]}px`);
-    element.style.setProperty("--local-y", `${update[2]}px`);
+    element.style.setProperty("--x", `${update[1]}px`);
+    element.style.setProperty("--y", `${update[2]}px`);
     element.style.setProperty("--rotation", `${update[3]}deg`);
     element.style.zIndex = update[4].toString();
 
@@ -112,12 +117,13 @@ let viewWindow: Window;
 
 // Add new elements to DOM, remove old elements
 function replaceMagnets(magnetArray: Magnet[]) {
+  // Add new elements to document fragment to be added as a batch
   const newElements = new DocumentFragment();
   for (const magnet of magnetArray) {
     const element = document.getElementById(`${magnet.id}`);
     if (element) {
-      element.style.setProperty("--local-x", `${magnet.x}px`);
-      element.style.setProperty("--local-y", `${magnet.y}px`);
+      element.style.setProperty("--x", `${magnet.x}px`);
+      element.style.setProperty("--y", `${magnet.y}px`);
       element.style.setProperty("--rotation", `${magnet.rotation}deg`);
       element.style.zIndex = magnet.zIndex.toString();
     } else {
@@ -125,26 +131,32 @@ function replaceMagnets(magnetArray: Magnet[]) {
     }
   }
 
+  // remove all now-out-of-bounds magnets
   door.querySelectorAll(".magnet").forEach((element) => {
     const magnet = element as HTMLElement;
     if (
       !viewWindow.contains(
-        parseInt(magnet.style.getPropertyValue("--local-x")),
-        parseInt(magnet.style.getPropertyValue("--local-y")),
+        parseInt(magnet.style.getPropertyValue("--x")),
+        parseInt(magnet.style.getPropertyValue("--y")),
       )
     ) {
       door.removeChild(magnet);
     }
   });
 
+  // add new magnets after removing old ones so we don't have to iterate over them
   door.append(newElements);
 }
 
 // Don't rerun all this logic if we are reconnecting to lost websocket connection
 let hasAlreadyOpened = false;
 webSocket.onopen = () => {
+  // if the window was rescaled before moving, request everything to avoid weirdness
+  let hasScaled = false;
+
   if (hasAlreadyOpened) {
     // Re-request the whole window in case stuff was lost while disconnected
+    hasScaled = true;
     updateCoordinatesFromHash();
     return;
   }
@@ -152,36 +164,38 @@ webSocket.onopen = () => {
 
   let isDraggingWindow = false;
 
+  // starting x, y of cursor relative to world origin
   let startingX = 0;
   let startingY = 0;
 
+  // current coordinates of viewport center relative to world origin
   let centerX = 0;
   let centerY = 0;
 
-  let hasScaled = false;
-
   function updateCoordinatesFromHash() {
     const params = new URLSearchParams(globalThis.location.hash.slice(1));
+    // TODO reverse x,y
+    // TODO make magnet coords center coords?
+    // TODO random coords if hash is nonsense instead of 0,0
     centerX = parseInt(params.get("x") ?? "0");
     centerY = -parseInt(params.get("y") ?? "0");
 
     door.style.setProperty("--center-x", `${centerX}px`);
     door.style.setProperty("--center-y", `${centerY}px`);
 
+    // request magnets within the bounds of our new window
     viewWindow = new Window(
-      Math.round(centerX - 1.5 * globalThis.innerWidth),
-      Math.round(centerY - 1.5 * globalThis.innerHeight),
-      Math.round(centerX + 1.5 * globalThis.innerWidth),
-      Math.round(centerY + 1.5 * globalThis.innerHeight),
+      Math.round(centerX - 1.5 * globalThis.innerWidth / scale),
+      Math.round(centerY - 1.5 * globalThis.innerHeight / scale),
+      Math.round(centerX + 1.5 * globalThis.innerWidth / scale),
+      Math.round(centerY + 1.5 * globalThis.innerHeight / scale),
     );
-
-    console.log(globalThis.innerWidth + " x " + globalThis.innerHeight);
-    console.log(viewWindow);
 
     webSocket.send(viewWindow.pack(hasScaled));
     hasScaled = false;
   }
 
+  // put user at random coordinates if they come without a hash
   if (!globalThis.location.hash) {
     const randomX = Math.round(Math.random() * 100000);
     const randomY = Math.round(Math.random() * 100000);
@@ -199,10 +213,11 @@ webSocket.onopen = () => {
   document.addEventListener(
     "pointerdown",
     (e) => {
+      // ignore right clicks
       if (e.button !== 0) return;
 
+      // store multiple finger presses for pinch/zoom
       evCache.push(e);
-
       if (evCache.length > 1) return;
 
       if (transitioning) {
@@ -212,17 +227,19 @@ webSocket.onopen = () => {
 
       const target = e.target as HTMLElement;
 
+      // remove rotation dot if it's showing on any magnet
       if (clickedElement && !clickedElement.contains(target)) {
         hideRotationDot(clickedElement);
       }
 
-      if (e.target !== door || isDraggingWindow || evCache.length > 1) {
+      if (e.target !== door || isDraggingWindow) {
         return;
       }
+
       door.setPointerCapture(e.pointerId);
       isDraggingWindow = true;
 
-      // starting coordinates of mouse relative to origin
+      // starting coordinates of mouse relative to world origin
       startingX = centerX + (e.clientX - globalThis.innerWidth / 2) / scale;
       startingY = centerY + (e.clientY - globalThis.innerHeight / 2) / scale;
     },

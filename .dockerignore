@@ -7,5 +7,6 @@ seeds/
 fly.toml
 Dockerfile
 .dockerignore
+.gitignore
 .git/
 .github/
