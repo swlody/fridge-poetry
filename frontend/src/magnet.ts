@@ -71,7 +71,7 @@ function packedMagnetUpdate(
   y: number,
   rotation: number,
 ) {
-  return pack([true, id, x, y, rotation]);
+  return pack([id, x, y, rotation]);
 }
 
 function setupEventListeners(element: HTMLElement, webSocket: WebSocket) {
