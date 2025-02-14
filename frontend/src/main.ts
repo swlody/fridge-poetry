@@ -163,8 +163,8 @@ webSocket.onopen = () => {
 
   let isDraggingWindow = false;
 
-  let clickOffsetX = 0;
-  let clickOffsetY = 0;
+  let startingX = 0;
+  let startingY = 0;
 
   let centerX = 0;
   let centerY = 0;
@@ -189,7 +189,7 @@ webSocket.onopen = () => {
     console.log(globalThis.innerWidth + " x " + globalThis.innerHeight);
     console.log(viewWindow);
 
-    webSocket.send(viewWindow.pack(true));
+    webSocket.send(viewWindow.pack(hasScaled));
     hasScaled = false;
   }
 
@@ -231,18 +231,15 @@ webSocket.onopen = () => {
         hideRotationDot(clickedElement);
       }
 
-      if (
-        e.target !== door ||
-        isDraggingWindow ||
-        evCache.length > 1
-      ) {
+      if (e.target !== door || isDraggingWindow || evCache.length > 1) {
         return;
       }
       door.setPointerCapture(e.pointerId);
       isDraggingWindow = true;
 
-      clickOffsetX = centerX + (e.clientX - globalThis.innerWidth / 2) / scale;
-      clickOffsetY = centerY + (e.clientY - globalThis.innerHeight / 2) / scale;
+      // starting coordinates of mouse relative to origin
+      startingX = centerX + (e.clientX - globalThis.innerWidth / 2) / scale;
+      startingY = centerY + (e.clientY - globalThis.innerHeight / 2) / scale;
     },
     { passive: true },
   );
@@ -273,21 +270,15 @@ webSocket.onopen = () => {
         prevDiff = curDiff;
       } else if (evCache.length === 1 && isDraggingWindow) {
         centerX = Math.floor(
-          clickOffsetX - (e.clientX - globalThis.innerWidth / 2) / scale,
+          startingX - (e.clientX - globalThis.innerWidth / 2) / scale,
         );
         centerY = Math.floor(
-          clickOffsetY - (e.clientY - globalThis.innerHeight / 2) / scale,
+          startingY - (e.clientY - globalThis.innerHeight / 2) / scale,
         );
 
         requestAnimationFrame(() => {
-          door.style.setProperty(
-            "--center-x",
-            `${centerX}px`,
-          );
-          door.style.setProperty(
-            "--center-y",
-            `${centerY}px`,
-          );
+          door.style.setProperty("--center-x", `${centerX}px`);
+          door.style.setProperty("--center-y", `${centerY}px`);
         });
       }
     },
