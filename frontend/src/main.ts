@@ -192,7 +192,7 @@ webSocket.onopen = () => {
       Math.round(canvasY + (2 * globalThis.innerHeight) / scale),
     );
 
-    webSocket.send(viewWindow.pack(hasScaled));
+    webSocket.send(viewWindow.pack(true));
     hasScaled = false;
   }
 
