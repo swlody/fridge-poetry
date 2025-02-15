@@ -208,7 +208,7 @@ async fn handle_websocket_binary(
                 return Ok(());
             };
 
-            match send_new_magnets(&mut writer, &difference, &state).await {
+            match send_new_magnets(writer, &difference, state).await {
                 Ok(()) => {}
                 Err(FridgeError::Tungstenite(e)) => {
                     tracing::debug!("Unable to send new magnets, disconnecting websocket: {e}");
@@ -220,8 +220,7 @@ async fn handle_websocket_binary(
             }
         }
         ClientUpdate::Magnet(magnet_update) => {
-            if let Err(FridgeError::Sqlx(e)) =
-                update_magnet(magnet_update, session_id, &state).await
+            if let Err(FridgeError::Sqlx(e)) = update_magnet(magnet_update, session_id, state).await
             {
                 tracing::error!("Unable to update magnet in databse: {e}");
             }
