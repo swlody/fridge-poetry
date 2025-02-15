@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct Point {
     pub x: i32,
     pub y: i32,
@@ -75,31 +75,116 @@ impl Window {
             }));
         }
 
-        Some(Shape::Polygon(Polygon {
-            p1: Point {
-                x: other.x1,
-                y: other.y1,
-            },
-            p2: Point {
-                x: other.x2,
-                y: other.y1,
-            },
-            p3: Point {
-                x: other.x2,
-                y: self.y2,
-            },
-            p4: Point {
-                x: self.x2,
-                y: self.y2,
-            },
-            p5: Point {
-                x: self.x2,
-                y: other.y2,
-            },
-            p6: Point {
-                x: other.x1,
-                y: other.y2,
-            },
-        }))
+        // fuck me
+
+        if other.x1 > self.x1 && other.y1 > self.y1 {
+            Some(Shape::Polygon(Polygon {
+                p1: Point {
+                    x: other.x1,
+                    y: other.y2,
+                },
+                p2: Point {
+                    x: other.x2,
+                    y: other.y2,
+                },
+                p3: Point {
+                    x: other.x2,
+                    y: other.y1,
+                },
+                p4: Point {
+                    x: self.x2,
+                    y: other.y1,
+                },
+                p5: Point {
+                    x: self.x2,
+                    y: self.y2,
+                },
+                p6: Point {
+                    x: other.x1,
+                    y: self.y2,
+                },
+            }))
+        } else if other.x1 > self.x1 && other.y1 < self.y1 {
+            Some(Shape::Polygon(Polygon {
+                p1: Point {
+                    x: other.x1,
+                    y: other.y1,
+                },
+                p2: Point {
+                    x: other.x1,
+                    y: self.y1,
+                },
+                p3: Point {
+                    x: self.x2,
+                    y: self.y1,
+                },
+                p4: Point {
+                    x: self.x2,
+                    y: other.y2,
+                },
+                p5: Point {
+                    x: other.x2,
+                    y: other.y2,
+                },
+                p6: Point {
+                    x: other.x2,
+                    y: other.y1,
+                },
+            }))
+        } else if other.x1 < self.x1 && other.y1 > self.y1 {
+            Some(Shape::Polygon(Polygon {
+                p1: Point {
+                    x: other.x1,
+                    y: other.y1,
+                },
+                p2: Point {
+                    x: other.x1,
+                    y: other.y2,
+                },
+                p3: Point {
+                    x: other.x2,
+                    y: other.y2,
+                },
+                p4: Point {
+                    x: other.x2,
+                    y: self.y2,
+                },
+                p5: Point {
+                    x: self.x1,
+                    y: self.y2,
+                },
+                p6: Point {
+                    x: self.x1,
+                    y: other.y1,
+                },
+            }))
+        } else {
+            Some(Shape::Polygon(Polygon {
+                p1: Point {
+                    x: other.x1,
+                    y: other.y1,
+                },
+                p2: Point {
+                    x: other.x1,
+                    y: other.y2,
+                },
+                p3: Point {
+                    x: self.x1,
+                    y: other.y2,
+                },
+                p4: Point {
+                    x: self.x1,
+                    y: self.y1,
+                },
+                p5: Point {
+                    x: other.x2,
+                    y: self.y1,
+                },
+                p6: Point {
+                    x: other.x2,
+                    y: other.y1,
+                },
+            }))
+        }
     }
 }
