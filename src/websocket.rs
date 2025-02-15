@@ -190,7 +190,7 @@ async fn update_magnet(
 async fn handle_websocket_binary(
     bytes: tokio_tungstenite::tungstenite::Bytes,
     client_window: &mut Window,
-    mut writer: &mut WsSink,
+    writer: &mut WsSink,
     state: &AppState,
     session_id: &Uuid,
 ) -> Result<(), ()> {
