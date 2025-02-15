@@ -3,6 +3,7 @@
   "specifiers": {
     "npm:@deno/vite-plugin@1": "1.0.3_vite@6.1.0",
     "npm:@types/node@*": "22.5.4",
+    "npm:easing-utils@1": "1.0.0",
     "npm:msgpackr@^1.11.2": "1.11.2",
     "npm:prettier@*": "3.5.0",
     "npm:vite@*": "6.1.0_@types+node@22.5.4",
@@ -177,6 +178,9 @@
     "detect-libc@2.0.3": {
       "integrity": "sha512-bwy0MGW55bG41VqxxypOsdSdGqLwXPI/focwgTYCFMbdUiBAxLg9CFzG08sz2aqzknwiX7Hkl0bQENjg8iLByw=="
     },
+    "easing-utils@1.0.0": {
+      "integrity": "sha512-9oabISTqjTJSZyu85nJMfYtlV2tT/Uwo0M3uqODrBWCxme0eyLqEXRuG2/uYpyqzc7iSHjV/KW2mEKTqhdtESA=="
+    },
     "esbuild@0.24.2": {
       "integrity": "sha512-+9egpBW8I3CD5XPe0n6BfT5fxLzxrlDzqydF3aviG+9ni1lDC/OvMHcxqEFV0+LANZG5R1bFMWfUrjVsdwxJvA==",
       "dependencies": [
@@ -306,6 +310,7 @@
   "workspace": {
     "dependencies": [
       "npm:@deno/vite-plugin@1",
+      "npm:easing-utils@1",
       "npm:msgpackr@^1.11.2",
       "npm:vite@^6.0.1"
     ]
