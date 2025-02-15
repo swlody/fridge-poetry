@@ -24,5 +24,6 @@ frontend/.vite
 *.sw?
 
 target/
+seeds/magnets.csv
 
 .env
