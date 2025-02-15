@@ -1,4 +1,5 @@
 import { pack, unpack } from "msgpackr";
+import * as ease from "easing-utils";
 
 import {
   clickedElement,
@@ -293,134 +294,164 @@ webSocket.onopen = () => {
   const evCache: PointerEvent[] = [];
   let prevDiff = -1;
 
-  document.addEventListener(
-    "pointerdown",
-    (e) => {
-      // ignore right clicks
-      if (e.button !== 0) return;
+  setupDocumentEventListeners();
 
-      // store multiple finger presses for pinch/zoom
-      evCache.push(e);
-      if (evCache.length > 1) return;
+  door.style.setProperty("--scale", "0.5");
+  let startTime = 0;
+  const animationDuration = 2000;
+  let isInLoadingAnimation = false;
+  function zoomAnimation(now: number) {
+    if (startTime === 0) {
+      isInLoadingAnimation = true;
+      startTime = now;
+    }
 
-      transitioning.forEach((element) => {
-        element.style.transition = "";
-      });
-      transitioning.clear();
-
-      const target = e.target as HTMLElement;
-
-      // remove rotation dot if it's showing on any magnet
-      if (clickedElement && !clickedElement.contains(target)) {
-        hideRotationDot(clickedElement);
-      }
-
-      if (e.target !== door || isDraggingWindow) {
-        return;
-      }
-
-      door.setPointerCapture(e.pointerId);
-      isDraggingWindow = true;
-
-      originalCenterX = centerX;
-      originalCenterY = centerY;
-
-      // starting coordinates of mouse relative to world origin
-      startingX = centerX + (e.clientX - globalThis.innerWidth / 2) / scale;
-      startingY = -centerY + (e.clientY - globalThis.innerHeight / 2) / scale;
-    },
-    { passive: true },
-  );
-
-  document.addEventListener(
-    "pointermove",
-    (e) => {
-      if (isDraggingMagnet) return;
-
-      const index = evCache.findIndex(
-        (cachedEv) => cachedEv.pointerId == e.pointerId,
+    const percentDone = (now - startTime) / animationDuration;
+    if (percentDone >= 1) {
+      door.style.setProperty("--scale", "1");
+      isInLoadingAnimation = false;
+    } else {
+      door.style.setProperty(
+        "--scale",
+        `${0.5 + ease.easeOutCubic(percentDone) * 0.5}`,
       );
-      evCache[index] = e;
+      requestAnimationFrame(zoomAnimation);
+    }
+  }
 
-      if (evCache.length === 2) {
-        const xDiff = evCache[0].clientX - evCache[1].clientX;
-        const yDiff = evCache[0].clientY - evCache[1].clientY;
-        const curDiff = Math.sqrt(xDiff * xDiff + yDiff * yDiff);
+  requestAnimationFrame(zoomAnimation);
 
-        if (prevDiff > 0) {
-          scale += (curDiff - prevDiff) / 500;
-          scale = Math.min(Math.max(0.5, scale), 1.5);
-          requestAnimationFrame(() => {
-            startScrollTimer();
-            door.style.setProperty("--scale", `${scale}`);
-          });
+  function setupDocumentEventListeners() {
+    document.addEventListener(
+      "pointerdown",
+      (e) => {
+        // ignore right clicks
+        if (e.button !== 0) return;
+
+        // store multiple finger presses for pinch/zoom
+        evCache.push(e);
+        if (evCache.length > 1) return;
+
+        transitioning.forEach((element) => {
+          element.style.transition = "";
+        });
+        transitioning.clear();
+
+        const target = e.target as HTMLElement;
+
+        // remove rotation dot if it's showing on any magnet
+        if (clickedElement && !clickedElement.contains(target)) {
+          hideRotationDot(clickedElement);
         }
 
-        prevDiff = curDiff;
-      } else if (evCache.length === 1 && isDraggingWindow) {
-        centerX = Math.floor(
-          startingX - (e.clientX - globalThis.innerWidth / 2) / scale,
-        );
-        centerY = -Math.floor(
-          startingY - (e.clientY - globalThis.innerHeight / 2) / scale,
-        );
+        if (e.target !== door || isDraggingWindow) {
+          return;
+        }
 
+        door.setPointerCapture(e.pointerId);
+        isDraggingWindow = true;
+
+        originalCenterX = centerX;
+        originalCenterY = centerY;
+
+        // starting coordinates of mouse relative to world origin
+        startingX = centerX + (e.clientX - globalThis.innerWidth / 2) / scale;
+        startingY = -centerY + (e.clientY - globalThis.innerHeight / 2) / scale;
+      },
+      { passive: true },
+    );
+
+    document.addEventListener(
+      "pointermove",
+      (e) => {
+        if (isDraggingMagnet) return;
+
+        const index = evCache.findIndex(
+          (cachedEv) => cachedEv.pointerId == e.pointerId,
+        );
+        evCache[index] = e;
+
+        if (evCache.length === 2 && !isInLoadingAnimation) {
+          const xDiff = evCache[0].clientX - evCache[1].clientX;
+          const yDiff = evCache[0].clientY - evCache[1].clientY;
+          const curDiff = Math.sqrt(xDiff * xDiff + yDiff * yDiff);
+
+          if (prevDiff > 0) {
+            scale += (curDiff - prevDiff) / 500;
+            scale = Math.min(Math.max(0.5, scale), 1.5);
+            requestAnimationFrame(() => {
+              startScrollTimer();
+              door.style.setProperty("--scale", `${scale}`);
+            });
+          }
+
+          prevDiff = curDiff;
+        } else if (evCache.length === 1 && isDraggingWindow) {
+          centerX = Math.floor(
+            startingX - (e.clientX - globalThis.innerWidth / 2) / scale,
+          );
+          centerY = -Math.floor(
+            startingY - (e.clientY - globalThis.innerHeight / 2) / scale,
+          );
+
+          requestAnimationFrame(() => {
+            door.style.setProperty("--center-x", `${centerX}px`);
+            door.style.setProperty("--center-y", `${centerY}px`);
+          });
+        }
+      },
+      { passive: true },
+    );
+
+    document.addEventListener(
+      "pointerup",
+      (e) => {
+        const index = evCache.findIndex(
+          (cachedEv) => cachedEv.pointerId === e.pointerId,
+        );
+        evCache.splice(index, 1);
+
+        if (evCache.length < 2) {
+          prevDiff = -1;
+        }
+
+        if (!isDraggingWindow) return;
+        door.releasePointerCapture(e.pointerId);
+        isDraggingWindow = false;
+
+        const xDiff = Math.abs(centerX - originalCenterX);
+        const yDiff = Math.abs(centerY - originalCenterY);
+
+        if (xDiff >= 1.0 || yDiff >= 1.0) {
+          globalThis.location.replace(
+            `#x=${Math.round(centerX)}&y=${Math.round(centerY)}`,
+          );
+        }
+      },
+      { passive: true },
+    );
+
+    document.addEventListener(
+      "dblclick",
+      (e) => {
+        e.preventDefault();
+      },
+      { passive: true },
+    );
+
+    document.addEventListener(
+      "wheel",
+      (e) => {
+        if (isInLoadingAnimation) return;
+        scale += e.deltaY * -0.001;
+        scale = Math.min(Math.max(0.5, scale), 1.5);
         requestAnimationFrame(() => {
-          door.style.setProperty("--center-x", `${centerX}px`);
-          door.style.setProperty("--center-y", `${centerY}px`);
+          door.style.setProperty("--scale", `${scale}`);
+
+          startScrollTimer();
         });
-      }
-    },
-    { passive: true },
-  );
-
-  document.addEventListener(
-    "pointerup",
-    (e) => {
-      const index = evCache.findIndex(
-        (cachedEv) => cachedEv.pointerId === e.pointerId,
-      );
-      evCache.splice(index, 1);
-
-      if (evCache.length < 2) {
-        prevDiff = -1;
-      }
-
-      if (!isDraggingWindow) return;
-      door.releasePointerCapture(e.pointerId);
-      isDraggingWindow = false;
-
-      const xDiff = Math.abs(centerX - originalCenterX);
-      const yDiff = Math.abs(centerY - originalCenterY);
-
-      if (xDiff >= 1.0 || yDiff >= 1.0) {
-        globalThis.location.replace(
-          `#x=${Math.round(centerX)}&y=${Math.round(centerY)}`,
-        );
-      }
-    },
-    { passive: true },
-  );
-
-  document.addEventListener(
-    "touchend",
-    (e) => {
-      e.preventDefault();
-    },
-    { passive: true },
-  );
-
-  document.addEventListener(
-    "wheel",
-    (e) => {
-      scale += e.deltaY * -0.001;
-      scale = Math.min(Math.max(0.5, scale), 1.5);
-      requestAnimationFrame(() => {
-        door.style.setProperty("--scale", `${scale}`);
-
-        startScrollTimer();
-      });
-    },
-    { passive: true },
-  );
+      },
+      { passive: true },
+    );
+  }
 };
