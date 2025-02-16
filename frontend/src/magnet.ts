@@ -148,6 +148,9 @@ function setupEventListeners(element: HTMLElement, webSocket: WebSocket) {
         newX = e.clientX / scale - startX;
         newY = -e.clientY / scale - startY;
 
+        newX = Math.max(-500000, Math.min(500000, newX));
+        newY = Math.max(-500000, Math.min(500000, newY));
+
         requestAnimationFrame(() => {
           element.style.setProperty("--x", `${Math.round(newX)}px`);
           element.style.setProperty("--y", `${Math.round(newY)}px`);

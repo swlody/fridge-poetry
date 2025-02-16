@@ -191,10 +191,18 @@ async fn run(config: Config) -> Result<()> {
 }
 
 async fn accept_connection(stream: TcpStream, state: AppState) {
+    let peer_addr = stream
+        .peer_addr()
+        .map(|a| a.to_string())
+        .unwrap_or_default();
     match tokio_tungstenite::accept_async(stream).await {
         Ok(ws_stream) => {
+            let session_id = Uuid::now_v7();
+            tracing::debug!(
+                "Creating new session with session_id: {session_id} for peer: {peer_addr}",
+            );
             let (writer, reader) = ws_stream.split();
-            websocket::handle_socket(reader, writer, Uuid::now_v7(), state).await;
+            websocket::handle_socket(reader, writer, session_id, state).await;
         }
         Err(e) => {
             tracing::warn!("Unable to open websocket connection: {}", e);

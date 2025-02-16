@@ -37,6 +37,33 @@ impl Window {
     }
 
     #[tracing::instrument]
+    pub fn is_valid(&self) -> bool {
+        self.x2 > self.x1 && self.y2 > self.y1
+    }
+
+    #[tracing::instrument]
+    pub fn clamp(&self) -> Window {
+        let width = self.x2 - self.x1;
+        let height = self.y2 - self.y1;
+
+        let (x1, x2) = if width > 23040 {
+            let width_diff = width - 23040;
+            (self.x1 - width_diff / 2, self.x2 + width_diff / 2)
+        } else {
+            (self.x1, self.x2)
+        };
+
+        let (y1, y2) = if height > 12960 {
+            let height_diff = height - 12960;
+            (self.y1 - height_diff / 2, self.y2 + height_diff / 2)
+        } else {
+            (self.y1, self.y2)
+        };
+
+        Window { x1, x2, y1, y2 }
+    }
+
+    #[tracing::instrument]
     pub fn difference(&self, other: &Window) -> Option<Shape> {
         if self.x1 == other.x1 && self.x2 == other.x2 && self.y1 == other.y1 && self.y2 == other.y2
         {
