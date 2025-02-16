@@ -3,6 +3,12 @@ use std::{
     io::{BufRead as _, BufReader},
 };
 
+// easter eggs:
+// recurse -> https://www.recurse.com/
+// cleo -> cat pic
+// 🏳️‍⚧️ -> https://translifeline.org/
+// ♀ -> https://abortionfunds.org/
+// 🇵🇸 -> https://www.pcrf.net/
 use rand::{seq::IndexedRandom as _, Rng as _, SeedableRng};
 
 const NUM_MAGNETS: i32 = 20_000_000;
@@ -44,7 +50,13 @@ fn main() {
 
     let f = File::open("seeds/easter_eggs.txt").unwrap();
     let reader = BufReader::new(f);
-    for word in reader.lines() {
-        let _word = word.unwrap();
+    for word in reader.lines().map(Result::unwrap) {
+        let x = rng.random_range(-MAX_X..=MAX_X);
+        let y = rng.random_range(-MAX_X..=MAX_X);
+        let rotation = rng.random_range(-5..=5);
+
+        writer
+            .write_record(&[format!("({},{})", x, y), rotation.to_string(), word.clone()])
+            .unwrap();
     }
 }
