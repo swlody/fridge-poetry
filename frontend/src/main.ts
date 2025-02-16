@@ -142,6 +142,22 @@ function replaceMagnets(magnetArray: Magnet[]) {
 // TODO kick people off after some idle time and reconnect on interaction
 const webSocket = new WebSocket(WS_URL);
 
+const loaderElement = document.getElementById("loader")!;
+webSocket.onclose = () => {
+  console.log("closed");
+  while (door.lastChild) {
+    door.removeChild(door.lastChild);
+  }
+  door.innerHTML = `<div class="error">
+    <p>Something went wrong :(</p>
+    <p>Please refresh</p>
+  </div>`;
+};
+
+webSocket.onerror = () => {
+  webSocket.close();
+};
+
 // TODO consider race conditions between this and mouseup replaceMagnets
 // We receive an update to a magnet within our window
 webSocket.onmessage = async (e) => {
@@ -273,7 +289,7 @@ webSocket.onopen = () => {
   globalThis.addEventListener("hashchange", updateCoordinatesFromHash);
   updateCoordinatesFromHash();
 
-  document.body.removeChild(document.getElementById("loader")!);
+  document.body.removeChild(loaderElement);
 
   const evCache: PointerEvent[] = [];
   let prevDiff = -1;
