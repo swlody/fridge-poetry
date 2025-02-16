@@ -51,6 +51,14 @@ body {
   cursor: grabbing;
 }
 
+.magnet a {
+  text-decoration: none;
+  color: inherit;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+}
+
 .fake-magnet {
   border: 1px solid black;
   display: inline-block;

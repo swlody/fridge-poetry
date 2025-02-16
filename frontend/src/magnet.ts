@@ -40,7 +40,7 @@ export class Magnet {
     element.style.setProperty("--rotation", `${this.rotation}deg`);
     element.style.zIndex = this.zIndex.toString();
 
-    element.insertAdjacentText("beforeend", this.word);
+    element.insertAdjacentHTML("beforeend", this.word);
 
     setupEventListeners(element, webSocket);
     return element;
