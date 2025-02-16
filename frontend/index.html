@@ -19,14 +19,7 @@
   </head>
   <body>
     <div id="loader" class="loader"></div>
-    <main id="door">
-      <template id="magnet">
-        <div class="magnet">
-          <div hidden class="rotate-dot"></div>
-          <div hidden class="rotate-link"></div>
-        </div>
-      </template>
-    </main>
+    <main id="door"></main>
     <div id="about-dialog" popover>
       <p class="fake-magnet" style="--rotation: 4deg">Made</p>
       <p class="fake-magnet" style="--rotation: 2deg">by</p>
@@ -51,5 +44,7 @@
     >
       About
     </button>
+    <div id="dot" hidden class="rotate-dot"></div>
+    <div id="link" hidden class="rotate-link"></div>
   </body>
 </html>

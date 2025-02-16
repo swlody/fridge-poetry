@@ -5,8 +5,6 @@ import { scale } from "./main.ts";
 export let clickedElement: HTMLElement | null = null;
 export let isDraggingMagnet = false;
 
-const magnetTemplate = document.getElementById("magnet") as HTMLTemplateElement;
-
 export class Magnet {
   id: number;
   x: number;
@@ -32,10 +30,10 @@ export class Magnet {
   }
 
   toElement(webSocket: WebSocket): HTMLElement {
-    const element = (magnetTemplate.content.cloneNode(true) as DocumentFragment)
-      .firstElementChild as HTMLElement;
+    const element = document.createElement("div");
 
     element.id = this.id.toString();
+    element.className = "magnet";
 
     element.style.setProperty("--x", `${this.x}px`);
     element.style.setProperty("--y", `${this.y}px`);
@@ -49,22 +47,25 @@ export class Magnet {
   }
 }
 
-function showRotationDot(element: HTMLElement) {
-  for (const child of element.children) {
-    const div = child as HTMLDivElement;
-    div.hidden = false;
-  }
+const rotationDot = document.getElementById("dot")!;
+const rotationLink = document.getElementById("link")!;
 
+function showRotationDotOn(element: HTMLElement) {
   clickedElement = element;
+  element.appendChild(rotationDot);
+  element.appendChild(rotationLink);
+  rotationDot.hidden = false;
+  rotationLink.hidden = false;
 }
 
-export function hideRotationDot(element: HTMLElement) {
-  for (const child of element.children) {
-    const div = child as HTMLDivElement;
-    div.hidden = true;
+export function hideRotationDot() {
+  if (clickedElement) {
+    clickedElement.removeChild(rotationDot);
+    clickedElement.removeChild(rotationLink);
+    rotationDot.hidden = true;
+    rotationLink.hidden = true;
+    clickedElement = null;
   }
-
-  clickedElement = null;
 }
 
 function packedMagnetUpdate(
@@ -136,9 +137,7 @@ function setupEventListeners(element: HTMLElement, webSocket: WebSocket) {
     "pointermove",
     (e) => {
       if (isDragging) {
-        if (clickedElement) {
-          hideRotationDot(clickedElement);
-        }
+        hideRotationDot();
 
         hasChanged = true;
 
@@ -183,9 +182,9 @@ function setupEventListeners(element: HTMLElement, webSocket: WebSocket) {
           (Math.abs(newX - originalX) < 0.5 && Math.abs(newY - originalY) < 0.5)
         ) {
           if (!clickedElement) {
-            showRotationDot(element);
+            showRotationDotOn(element);
           } else {
-            hideRotationDot(element);
+            hideRotationDot();
           }
         } else {
           const magnetUpdate = packedMagnetUpdate(
