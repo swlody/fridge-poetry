@@ -55,19 +55,23 @@ function chooseRandomEdgeCoords() {
   const rand = Math.random();
   if (rand < 0.25) {
     x = viewWindow.x1;
-    y = Math.floor(Math.random() * (viewWindow.y2 - viewWindow.y1 + 1)) +
+    y =
+      Math.floor(Math.random() * (viewWindow.y2 - viewWindow.y1 + 1)) +
       viewWindow.y2;
   } else if (rand < 0.5) {
     x = viewWindow.x2;
-    y = Math.floor(Math.random() * (viewWindow.y2 - viewWindow.y1 + 1)) +
+    y =
+      Math.floor(Math.random() * (viewWindow.y2 - viewWindow.y1 + 1)) +
       viewWindow.y2;
   } else if (rand < 0.75) {
     y = viewWindow.y1;
-    x = Math.floor(Math.random() * (viewWindow.x2 - viewWindow.x1 + 1)) +
+    x =
+      Math.floor(Math.random() * (viewWindow.x2 - viewWindow.x1 + 1)) +
       viewWindow.x2;
   } else {
     y = viewWindow.y2;
-    x = Math.floor(Math.random() * (viewWindow.x2 - viewWindow.x1 + 1)) +
+    x =
+      Math.floor(Math.random() * (viewWindow.x2 - viewWindow.x1 + 1)) +
       viewWindow.x2;
   }
 
