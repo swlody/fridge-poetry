@@ -188,7 +188,7 @@ async fn update_magnet(
 
 #[tracing::instrument]
 async fn handle_websocket_binary(
-    bytes: tokio_tungstenite::tungstenite::Bytes,
+    bytes: tungstenite::Bytes,
     client_window: &mut Window,
     writer: &mut WsSink,
     state: &AppState,
@@ -246,6 +246,7 @@ pub async fn handle_socket(
     loop {
         select! {
             () = state.token.cancelled() => {
+                let _ = writer.close().await;
                 break;
             }
 

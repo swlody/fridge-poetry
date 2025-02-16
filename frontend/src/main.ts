@@ -40,22 +40,10 @@ class Window {
 
 const door = document.getElementById("door")!;
 
-let webSocket = new WebSocket(WS_URL);
+const webSocket = new WebSocket(WS_URL);
 
-webSocket.onerror = (err) => {
-  console.error("Socket encountered error: ", err, "Closing socket");
-  webSocket.close();
-};
-
-// TODO check reconnect logic
+// TODO reconnect logic
 // TODO kick people off after some idle time and reconnect on interaction
-webSocket.onclose = () => {
-  while (!webSocket.OPEN) {
-    setTimeout(() => {
-      webSocket = new WebSocket(WS_URL);
-    }, 1000);
-  }
-};
 
 // Elements that are currently in a transition animation
 // because it was moved by someone else...
@@ -219,8 +207,6 @@ function replaceMagnets(magnetArray: Magnet[]) {
 // Don't rerun all this logic if we are reconnecting to lost websocket connection
 let hasAlreadyOpened = false;
 webSocket.onopen = () => {
-  // if the window was rescaled before moving, request everything to avoid weirdness
-
   if (hasAlreadyOpened) {
     // Re-request the whole window in case stuff was lost while disconnected
     updateCoordinatesFromHash();

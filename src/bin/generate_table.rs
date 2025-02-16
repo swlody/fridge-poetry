@@ -35,10 +35,16 @@ fn main() {
 
         writer
             .write_record(&[
-                format!("({},{})", x, y).parse().unwrap(),
+                format!("({},{})", x, y),
                 rotation.to_string(),
                 word.to_string(),
             ])
             .unwrap();
+    }
+
+    let f = File::open("seeds/easter_eggs.txt").unwrap();
+    let reader = BufReader::new(f);
+    for word in reader.lines() {
+        let _word = word.unwrap();
     }
 }
