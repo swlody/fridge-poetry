@@ -3,12 +3,6 @@ use std::{
     io::{BufRead as _, BufReader},
 };
 
-// easter eggs:
-// recurse -> https://www.recurse.com/
-// cleo -> cat pic
-// 🏳️‍⚧️ -> https://translifeline.org/
-// ♀ -> https://abortionfunds.org/
-// 🇵🇸 -> https://www.pcrf.net/
 use rand::{seq::IndexedRandom as _, Rng as _, SeedableRng};
 
 const NUM_MAGNETS: i32 = 20_000_000;

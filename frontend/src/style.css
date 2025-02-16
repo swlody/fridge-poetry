@@ -108,6 +108,11 @@ body {
   -webkit-user-select: none;
 }
 
+#about-bottom {
+  margin-left: 40%;
+  margin-top: 15px;
+}
+
 #about-button {
   position: absolute;
   bottom: 0;

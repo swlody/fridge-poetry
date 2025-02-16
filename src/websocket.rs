@@ -1,3 +1,6 @@
+use std::time::Instant;
+
+use anyhow::bail;
 use futures_util::{
     stream::{SplitSink, SplitStream},
     SinkExt as _, StreamExt,
@@ -52,6 +55,31 @@ struct ClientMagnetUpdate {
     y: i32,
     rotation: i32,
 }
+
+impl ClientMagnetUpdate {
+    fn is_valid(&self, window: &Window) -> bool {
+        if self.id > 20_000_100 {
+            return false;
+        }
+
+        if !(-360..=360).contains(&self.rotation) {
+            return false;
+        }
+
+        if !(window.x1 - 100..=window.x2 + 100).contains(&self.x)
+            || !(window.y1 - 100..=window.y2 + 100).contains(&self.y)
+        {
+            return false;
+        }
+
+        if !(-500_000..=500_000).contains(&self.x) || !(-500_000..=500_000).contains(&self.y) {
+            return false;
+        }
+
+        true
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum ClientUpdate {
@@ -118,8 +146,8 @@ async fn send_new_magnets(
         Shape::Window(window) => sqlx::query_as!(
             Magnet,
             r#"SELECT id, coords[0]::int AS "x!", coords[1]::int AS "y!", rotation, word, z_index
-                    FROM magnets
-                    WHERE coords <@ Box(Point($1::int, $2::int), Point($3::int, $4::int))"#,
+               FROM magnets
+               WHERE coords <@ Box(Point($1::int, $2::int), Point($3::int, $4::int))"#,
             window.x1,
             window.y1,
             window.x2,
@@ -133,14 +161,14 @@ async fn send_new_magnets(
             Magnet,
             r#"SELECT id, coords[0]::int AS "x!", coords[1]::int AS "y!", rotation, word, z_index
                 FROM magnets
-                WHERE coords <@ ('(' ||
-            '(' || $1::int || ',' || $2::int || '),' ||
-            '(' || $3::int || ',' || $4::int || '),' ||
-            '(' || $5::int || ',' || $6::int || '),' ||
-            '(' || $7::int || ',' || $8::int || '),' ||
-            '(' || $9::int || ',' || $10::int || '),' ||
-            '(' || $11::int || ',' || $12::int || ')' ||
-            ')')::polygon"#,
+                WHERE coords <@ Polygon('(' ||
+                    '(' || $1::int || ',' || $2::int || '),' ||
+                    '(' || $3::int || ',' || $4::int || '),' ||
+                    '(' || $5::int || ',' || $6::int || '),' ||
+                    '(' || $7::int || ',' || $8::int || '),' ||
+                    '(' || $9::int || ',' || $10::int || '),' ||
+                    '(' || $11::int || ',' || $12::int || ')' ||
+                ')')"#,
             polygon.p1.x,
             polygon.p1.y,
             polygon.p2.x,
@@ -193,26 +221,29 @@ async fn handle_websocket_binary(
     writer: &mut WsSink,
     state: &AppState,
     session_id: &Uuid,
-) -> Result<(), ()> {
+) -> Result<(), anyhow::Error> {
     let Ok(client_update) = rmp_serde::from_slice(&bytes) else {
-        tracing::debug!("Received unknown msgpack");
-        return Ok(());
+        bail!("Received unknown msgpack");
     };
 
     match client_update {
         ClientUpdate::Window(window_update) => {
+            if !window_update.is_valid() {
+                bail!("Received invalid window update: {window_update:?}");
+            }
+
             let difference = client_window.difference(&window_update);
-            *client_window = window_update.clone();
+            *client_window = window_update.clamp();
 
             let Some(difference) = difference else {
+                // ignoring window non-change
                 return Ok(());
             };
 
             match send_new_magnets(writer, &difference, state).await {
                 Ok(()) => {}
                 Err(FridgeError::Tungstenite(e)) => {
-                    tracing::debug!("Unable to send new magnets, disconnecting websocket: {e}");
-                    return Err(());
+                    bail!("Unable to send new magnets, disconnecting websocket: {e}");
                 }
                 Err(FridgeError::Sqlx(e)) => {
                     tracing::error!("Unable to get magnets from database: {e}");
@@ -220,9 +251,13 @@ async fn handle_websocket_binary(
             }
         }
         ClientUpdate::Magnet(magnet_update) => {
+            if !magnet_update.is_valid(&client_window) {
+                bail!("Received invalid magnet update: {magnet_update:?}");
+            }
+
             if let Err(FridgeError::Sqlx(e)) = update_magnet(magnet_update, session_id, state).await
             {
-                tracing::error!("Unable to update magnet in databse: {e}");
+                bail!("Unable to update magnet in databse: {e}");
             }
         }
     }
@@ -242,6 +277,10 @@ pub async fn handle_socket(
 
     let mut rx = state.magnet_updates.subscribe();
     let mut client_window = Window::default();
+
+    const REQUESTS_PER_SECOND: usize = 5;
+    let mut last_n_requests: [Option<Instant>; REQUESTS_PER_SECOND] = [None; REQUESTS_PER_SECOND];
+    let mut current_request_index = 0;
 
     loop {
         select! {
@@ -263,11 +302,27 @@ pub async fn handle_socket(
                 }
             }
 
-            // Update to watch window from WebSocket
             message = reader.next() => {
+                // rate limiting - if the nth to last request was less than a second ago, ignore the new one.
+                let now = Instant::now();
+                if let Some(timestamp) = last_n_requests[current_request_index] {
+                    if (now - timestamp).as_millis() >= 1000 {
+                        last_n_requests[current_request_index] = Some(now);
+                    } else {
+                        tracing::warn!("Client exceeding rate limit, ignoring request");
+                        continue;
+                    }
+                } else {
+                    last_n_requests[current_request_index] = Some(now);
+                }
+                current_request_index += 1;
+                if current_request_index > REQUESTS_PER_SECOND - 1 {
+                    current_request_index = 0;
+                }
+
                 match message {
                     Some(Ok(Message::Binary(bytes))) => {
-                        if handle_websocket_binary(
+                        if let Err(e) = handle_websocket_binary(
                             bytes,
                             &mut client_window,
                             &mut writer,
@@ -275,8 +330,8 @@ pub async fn handle_socket(
                             &session_id,
                         )
                         .await
-                        .is_err()
                         {
+                            tracing::debug!("Closing websocket due to error: {e}");
                             break;
                         };
                     }

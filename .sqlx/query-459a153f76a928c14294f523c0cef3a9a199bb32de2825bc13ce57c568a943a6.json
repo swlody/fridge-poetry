@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, coords[0]::int AS \"x!\", coords[1]::int AS \"y!\", rotation, word, z_index\n                    FROM magnets\n                    WHERE coords <@ Box(Point($1::int, $2::int), Point($3::int, $4::int))",
+  "query": "SELECT id, coords[0]::int AS \"x!\", coords[1]::int AS \"y!\", rotation, word, z_index\n                FROM magnets\n                WHERE coords <@ Polygon('(' ||\n                    '(' || $1::int || ',' || $2::int || '),' ||\n                    '(' || $3::int || ',' || $4::int || '),' ||\n                    '(' || $5::int || ',' || $6::int || '),' ||\n                    '(' || $7::int || ',' || $8::int || '),' ||\n                    '(' || $9::int || ',' || $10::int || '),' ||\n                    '(' || $11::int || ',' || $12::int || ')' ||\n                ')')",
   "describe": {
     "columns": [
       {
@@ -39,6 +39,14 @@
         "Int4",
         "Int4",
         "Int4",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4",
         "Int4"
       ]
     },
@@ -51,5 +59,5 @@
       false
     ]
   },
-  "hash": "20e8ce39b98f7853a2e46eea2b67d976bd36754100af87d15fec0b78fb0f98ff"
+  "hash": "459a153f76a928c14294f523c0cef3a9a199bb32de2825bc13ce57c568a943a6"
 }
