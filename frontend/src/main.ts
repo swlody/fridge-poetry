@@ -227,7 +227,7 @@ webSocket.onopen = () => {
   let originalCenterX = 0;
   let originalCenterY = 0;
 
-  let scrollTimer: number | null = null;
+  let resizeTimer: number | null = null;
 
   function makeNewHash() {
     const randomX = Math.round(Math.random() * 100000);
@@ -235,18 +235,18 @@ webSocket.onopen = () => {
     globalThis.location.replace(`#x=${randomX}&y=${randomY}`);
   }
 
-  function startScrollTimer() {
-    if (scrollTimer !== null) {
-      clearTimeout(scrollTimer);
+  function startResizeTimer() {
+    if (resizeTimer !== null) {
+      clearTimeout(resizeTimer);
     }
-    scrollTimer = setTimeout(function () {
+    resizeTimer = setTimeout(function () {
       updateCoordinatesFromHash();
-    }, 150);
+    }, 500);
   }
 
   function updateCoordinatesFromHash() {
-    if (scrollTimer) {
-      clearTimeout(scrollTimer);
+    if (resizeTimer) {
+      clearTimeout(resizeTimer);
     }
 
     const params = new URLSearchParams(globalThis.location.hash.slice(1));
@@ -366,7 +366,7 @@ webSocket.onopen = () => {
             scale += (curDiff - prevDiff) / 500;
             scale = Math.min(Math.max(0.5, scale), 1.5);
             requestAnimationFrame(() => {
-              startScrollTimer();
+              startResizeTimer();
               door.style.setProperty("--scale", `${scale}`);
             });
           }
@@ -425,7 +425,9 @@ webSocket.onopen = () => {
       { passive: false },
     );
 
-    // TODO resize handler
+    globalThis.addEventListener("resize", () => {
+      requestAnimationFrame(startResizeTimer);
+    });
 
     document.addEventListener(
       "wheel",
@@ -436,7 +438,7 @@ webSocket.onopen = () => {
         requestAnimationFrame(() => {
           door.style.setProperty("--scale", `${scale}`);
 
-          startScrollTimer();
+          startResizeTimer();
         });
       },
       { passive: true },
