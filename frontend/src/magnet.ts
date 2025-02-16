@@ -47,8 +47,12 @@ export class Magnet {
   }
 }
 
-const rotationDot = document.getElementById("dot")!;
-const rotationLink = document.getElementById("link")!;
+const rotationDot = document.createElement("div");
+rotationDot.hidden = true;
+rotationDot.className = "rotate-dot";
+const rotationLink = document.createElement("div");
+rotationLink.hidden = true;
+rotationLink.className = "rotate-link";
 
 function showRotationDotOn(element: HTMLElement) {
   clickedElement = element;
