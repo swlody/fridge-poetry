@@ -38,13 +38,6 @@ class Window {
   }
 }
 
-const door = document.getElementById("door")!;
-
-const webSocket = new WebSocket(WS_URL);
-
-// TODO reconnect logic
-// TODO kick people off after some idle time and reconnect on interaction
-
 // Elements that are currently in a transition animation
 // because it was moved by someone else...
 const transitioning = new Map<number, HTMLElement>();
@@ -109,6 +102,46 @@ function transitionElement(
   }
 }
 
+const door = document.getElementById("door")!;
+let viewWindow: Window;
+
+// Add new elements to DOM, remove old elements
+function replaceMagnets(magnetArray: Magnet[]) {
+  // Add new elements to document fragment to be added as a batch
+  const newElements = new DocumentFragment();
+  for (const magnet of magnetArray) {
+    const element = document.getElementById(`${magnet.id}`);
+    if (element) {
+      element.style.setProperty("--x", `${magnet.x}px`);
+      element.style.setProperty("--y", `${magnet.y}px`);
+      element.style.setProperty("--rotation", `${magnet.rotation}deg`);
+      element.style.zIndex = magnet.zIndex.toString();
+    } else {
+      newElements.append(magnet.toElement(webSocket));
+    }
+  }
+
+  // remove all now-out-of-bounds magnets
+  door.querySelectorAll(".magnet").forEach((element) => {
+    const magnet = element as HTMLElement;
+    if (
+      !viewWindow.contains(
+        parseInt(magnet.style.getPropertyValue("--x")),
+        parseInt(magnet.style.getPropertyValue("--y")),
+      )
+    ) {
+      door.removeChild(magnet);
+    }
+  });
+
+  // add new magnets after removing old ones so we don't have to iterate over them
+  door.append(newElements);
+}
+
+// TODO reconnect logic
+// TODO kick people off after some idle time and reconnect on interaction
+const webSocket = new WebSocket(WS_URL);
+
 // TODO consider race conditions between this and mouseup replaceMagnets
 // We receive an update to a magnet within our window
 webSocket.onmessage = async (e) => {
@@ -168,41 +201,6 @@ webSocket.onmessage = async (e) => {
     }, 500);
   }
 };
-
-let viewWindow: Window;
-
-// Add new elements to DOM, remove old elements
-function replaceMagnets(magnetArray: Magnet[]) {
-  // Add new elements to document fragment to be added as a batch
-  const newElements = new DocumentFragment();
-  for (const magnet of magnetArray) {
-    const element = document.getElementById(`${magnet.id}`);
-    if (element) {
-      element.style.setProperty("--x", `${magnet.x}px`);
-      element.style.setProperty("--y", `${magnet.y}px`);
-      element.style.setProperty("--rotation", `${magnet.rotation}deg`);
-      element.style.zIndex = magnet.zIndex.toString();
-    } else {
-      newElements.append(magnet.toElement(webSocket));
-    }
-  }
-
-  // remove all now-out-of-bounds magnets
-  door.querySelectorAll(".magnet").forEach((element) => {
-    const magnet = element as HTMLElement;
-    if (
-      !viewWindow.contains(
-        parseInt(magnet.style.getPropertyValue("--x")),
-        parseInt(magnet.style.getPropertyValue("--y")),
-      )
-    ) {
-      door.removeChild(magnet);
-    }
-  });
-
-  // add new magnets after removing old ones so we don't have to iterate over them
-  door.append(newElements);
-}
 
 // Don't rerun all this logic if we are reconnecting to lost websocket connection
 let hasAlreadyOpened = false;
