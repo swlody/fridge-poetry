@@ -251,7 +251,7 @@ async fn handle_websocket_binary(
             }
         }
         ClientUpdate::Magnet(magnet_update) => {
-            if !magnet_update.is_valid(&client_window) {
+            if !magnet_update.is_valid(client_window) {
                 bail!("Received invalid magnet update: {magnet_update:?}");
             }
 

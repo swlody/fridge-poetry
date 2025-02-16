@@ -144,7 +144,6 @@ const webSocket = new WebSocket(WS_URL);
 
 const loaderElement = document.getElementById("loader")!;
 webSocket.onclose = () => {
-  console.log("closed");
   while (door.lastChild) {
     door.removeChild(door.lastChild);
   }
