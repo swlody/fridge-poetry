@@ -114,7 +114,7 @@ function setupEventListeners(element: HTMLElement, webSocket: WebSocket) {
 
       element.setPointerCapture(e.pointerId);
 
-      if (clickedElement && e.target === element.firstElementChild) {
+      if (e.target === rotationDot) {
         rotating = true;
         initialRotation =
           parseInt(element.style.getPropertyValue("--rotation")) || 0;

@@ -59,6 +59,10 @@ body {
   -webkit-user-drag: none;
 }
 
+.magnet img {
+  -webkit-user-drag: none;
+}
+
 .fake-magnet {
   border: 1px solid black;
   display: inline-block;
