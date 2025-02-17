@@ -148,8 +148,11 @@ webSocket.onclose = () => {
     door.removeChild(door.lastChild);
   }
   door.innerHTML = `<div class="error">
-    <p>Something went wrong :(</p>
-    <p>Please refresh</p>
+    <div class="fake-magnet" style="--rotation: 2deg">Lost</div>
+    <div class="fake-magnet" style="--rotation: 1deg">connection</div>
+    <div class="fake-magnet" style="--rotation: 2deg">:(</div>
+    <div class="fake-magnet" style="--rotation: -3deg">please</div>
+    <div class="fake-magnet" style="--rotation: 2deg">refresh</div>
   </div>`;
 };
 
