@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use anyhow::bail;
 use futures_util::{
@@ -6,8 +6,9 @@ use futures_util::{
     SinkExt as _, StreamExt,
 };
 use serde::{Deserialize, Serialize};
-use tokio::{net::TcpStream, select};
+use tokio::{net::TcpStream, select, time::timeout};
 use tokio_tungstenite::{tungstenite, tungstenite::Message, WebSocketStream};
+use tracing::Level;
 use uuid::Uuid;
 
 use crate::{
@@ -269,6 +270,8 @@ pub async fn handle_socket(
     sentry::configure_scope(|scope| {
         scope.set_tag("session_id", session_id);
     });
+    let session = tracing::span!(Level::DEBUG, "session", id = session_id.to_string());
+    let _enter = session.enter();
 
     let mut rx = state.magnet_updates.subscribe();
     let mut client_window = Window::default();
@@ -277,76 +280,90 @@ pub async fn handle_socket(
     let mut last_n_requests: [Option<Instant>; REQUESTS_PER_SECOND] = [None; REQUESTS_PER_SECOND];
     let mut current_request_index = 0;
 
+    let mut time_since_last_comms = Instant::now();
+
     loop {
-        select! {
-            () = state.token.cancelled() => {
-                let _ = writer.close().await;
+        match timeout(Duration::from_millis(10000), async {
+            select! {
+                () = state.token.cancelled() => {
+                    let _ = writer.close().await;
+                    bail!("Shutdown");
+                }
+
+                // Update to a magnet entity from Postgres
+                magnet_update = rx.recv() => {
+                    let magnet_update = magnet_update?;
+                    send_relevant_update(&mut writer, &client_window, magnet_update).await?;
+                }
+
+                message = reader.next() => {
+                    // rate limiting - if the nth to last request was less than a second ago, ignore the new one.
+                    let now = Instant::now();
+
+                    if (now - time_since_last_comms).as_secs() > 600 {
+                        bail!("Idle connection");
+                    }
+                    time_since_last_comms = now;
+
+                    if let Some(timestamp) = last_n_requests[current_request_index] {
+                        if (now - timestamp).as_millis() >= 1000 {
+                            last_n_requests[current_request_index] = Some(now);
+                        } else {
+                            tracing::warn!("Client exceeding rate limit, ignoring request");
+                            return Ok(());
+                        }
+                    } else {
+                        last_n_requests[current_request_index] = Some(now);
+                    }
+                    current_request_index += 1;
+                    if current_request_index > REQUESTS_PER_SECOND - 1 {
+                        current_request_index = 0;
+                    }
+
+                    match message {
+                        Some(Ok(Message::Binary(bytes))) => {
+                            handle_websocket_binary(
+                                bytes,
+                                &mut client_window,
+                                &mut writer,
+                                &state,
+                                &session_id,
+                            )
+                            .await?;
+                        }
+                        Some(Ok(Message::Pong(_))) => {
+                            return Ok(());
+                        }
+                        Some(Ok(Message::Close(close))) => {
+                            bail!("WebSocket closed by client: {close:?}");
+                        }
+                        Some(Ok(thing)) => {
+                            bail!("Received unexpected message over websocket: {thing:?}");
+                        }
+                        Some(Err(e)) => {
+                            bail!("Websocket error: {e}");
+                        }
+                        None => {
+                            bail!("Received empty message over websocket");
+                        }
+                    }
+                }
+            }
+
+            Ok(())
+        })
+        .await
+        {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => {
+                tracing::debug!("Closing WebSocket connection: {e}");
                 break;
             }
-
-            // Update to a magnet entity from Postgres
-            magnet_update = rx.recv() => {
-                let magnet_update = magnet_update.expect("Broadcast sender unexpectedly dropped");
-
-                if send_relevant_update(&mut writer, &client_window, magnet_update)
+            Err(_) => {
+                writer
+                    .send(tungstenite::Message::Ping(tungstenite::Bytes::new()))
                     .await
-                    .is_err()
-                {
-                    tracing::debug!("Unable to send single magnet update, closing connection");
-                    break;
-                }
-            }
-
-            message = reader.next() => {
-                // rate limiting - if the nth to last request was less than a second ago, ignore the new one.
-                let now = Instant::now();
-                if let Some(timestamp) = last_n_requests[current_request_index] {
-                    if (now - timestamp).as_millis() >= 1000 {
-                        last_n_requests[current_request_index] = Some(now);
-                    } else {
-                        tracing::warn!("Client exceeding rate limit, ignoring request");
-                        continue;
-                    }
-                } else {
-                    last_n_requests[current_request_index] = Some(now);
-                }
-                current_request_index += 1;
-                if current_request_index > REQUESTS_PER_SECOND - 1 {
-                    current_request_index = 0;
-                }
-
-                match message {
-                    Some(Ok(Message::Binary(bytes))) => {
-                        if let Err(e) = handle_websocket_binary(
-                            bytes,
-                            &mut client_window,
-                            &mut writer,
-                            &state,
-                            &session_id,
-                        )
-                        .await
-                        {
-                            tracing::debug!("Closing websocket due to error: {e}");
-                            break;
-                        };
-                    }
-                    Some(Ok(Message::Close(close))) => {
-                        tracing::debug!("WebSocket closed by client: {close:?}");
-                        break;
-                    }
-                    Some(Ok(thing)) => {
-                        // TODO just disconnect if we receive invalid data?
-                        tracing::debug!("Received unexpected message over websocket: {thing:?}");
-                    }
-                    Some(Err(e)) => {
-                        tracing::debug!("Websocket error: {e}");
-                        break;
-                    }
-                    None => {
-                        tracing::debug!("Received empty message over websocket");
-                        break;
-                    }
-                }
+                    .unwrap();
             }
         }
     }
