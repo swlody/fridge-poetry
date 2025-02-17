@@ -227,6 +227,10 @@ webSocket.onmessage = async (e) => {
   }
 };
 
+const refreshButton = document.getElementById(
+  "refresh-button",
+)! as HTMLButtonElement;
+
 // Don't rerun all this logic if we are reconnecting to lost websocket connection
 let hasAlreadyOpened = false;
 webSocket.onopen = () => {
@@ -331,6 +335,19 @@ webSocket.onopen = () => {
   requestAnimationFrame(zoomAnimation);
 
   function setupDocumentEventListeners() {
+    refreshButton.addEventListener("click", () => {
+      makeNewHash();
+      updateCoordinatesFromHash();
+
+      refreshButton.disabled = true;
+      refreshButton.style.color = "darkgray";
+
+      setTimeout(() => {
+        refreshButton.style.color = "";
+        refreshButton.disabled = false;
+      }, 1000);
+    });
+
     document.addEventListener(
       "pointerdown",
       (e) => {
