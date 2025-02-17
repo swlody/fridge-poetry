@@ -271,7 +271,6 @@ pub async fn handle_socket(
         scope.set_tag("session_id", session_id);
     });
     let session = tracing::span!(Level::DEBUG, "session", id = session_id.to_string());
-    let _enter = session.enter();
 
     let mut rx = state.magnet_updates.subscribe();
     let mut client_window = Window::default();
@@ -292,11 +291,14 @@ pub async fn handle_socket(
 
                 // Update to a magnet entity from Postgres
                 magnet_update = rx.recv() => {
+                    let _enter = session.enter();
                     let magnet_update = magnet_update?;
                     send_relevant_update(&mut writer, &client_window, magnet_update).await?;
                 }
 
                 message = reader.next() => {
+                    let _enter = session.enter();
+
                     // rate limiting - if the nth to last request was less than a second ago, ignore the new one.
                     let now = Instant::now();
 
@@ -356,6 +358,7 @@ pub async fn handle_socket(
         {
             Ok(Ok(())) => {}
             Ok(Err(e)) => {
+                let _enter = session.enter();
                 tracing::debug!("Closing WebSocket connection: {e}");
                 break;
             }
