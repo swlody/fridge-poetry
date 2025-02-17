@@ -253,8 +253,8 @@ webSocket.onopen = () => {
   let resizeTimer: number | null = null;
 
   function makeNewHash() {
-    const randomX = Math.round(Math.random() * 1000);
-    const randomY = Math.round(Math.random() * 1000);
+    const randomX = Math.round(Math.random() * 5000);
+    const randomY = Math.round(Math.random() * 5000);
     globalThis.location.replace(`#x=${randomX}&y=${randomY}`);
   }
 
