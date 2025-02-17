@@ -93,12 +93,7 @@ async fn send_relevant_update(
     writer: &mut WsSink,
     client_window: &Window,
     magnet_update: PgMagnetUpdate,
-    session_id: Uuid,
 ) -> Result<bool, tungstenite::Error> {
-    if magnet_update.session_id == session_id {
-        return Ok(false);
-    }
-
     if client_window.contains(magnet_update.new_x, magnet_update.new_y) {
         if client_window.contains(magnet_update.old_x, magnet_update.old_y) {
             let location_update = MagnetUpdate::Move(LocationUpdate {
@@ -293,7 +288,7 @@ pub async fn handle_socket(
             magnet_update = rx.recv() => {
                 let magnet_update = magnet_update.expect("Broadcast sender unexpectedly dropped");
 
-                if send_relevant_update(&mut writer, &client_window, magnet_update, session_id)
+                if send_relevant_update(&mut writer, &client_window, magnet_update)
                     .await
                     .is_err()
                 {

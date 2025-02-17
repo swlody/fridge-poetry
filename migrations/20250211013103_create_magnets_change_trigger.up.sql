@@ -10,8 +10,7 @@ CREATE OR REPLACE FUNCTION notify_change() RETURNS TRIGGER AS $$
       'new_y', NEW.coords[1],
       'rotation', NEW.rotation,
       'z_index', NEW.z_index,
-      'word', NEW.word,
-      'session_id', NEW.last_modifier
+      'word', NEW.word
     );
     PERFORM pg_notify('magnet_updates', payload);
     RETURN NULL;
