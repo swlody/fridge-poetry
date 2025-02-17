@@ -48,23 +48,19 @@ function chooseRandomEdgeCoords() {
   const rand = Math.random();
   if (rand < 0.25) {
     x = viewWindow.x1;
-    y =
-      Math.floor(Math.random() * (viewWindow.y2 - viewWindow.y1 + 1)) +
+    y = Math.floor(Math.random() * (viewWindow.y2 - viewWindow.y1 + 1)) +
       viewWindow.y2;
   } else if (rand < 0.5) {
     x = viewWindow.x2;
-    y =
-      Math.floor(Math.random() * (viewWindow.y2 - viewWindow.y1 + 1)) +
+    y = Math.floor(Math.random() * (viewWindow.y2 - viewWindow.y1 + 1)) +
       viewWindow.y2;
   } else if (rand < 0.75) {
     y = viewWindow.y1;
-    x =
-      Math.floor(Math.random() * (viewWindow.x2 - viewWindow.x1 + 1)) +
+    x = Math.floor(Math.random() * (viewWindow.x2 - viewWindow.x1 + 1)) +
       viewWindow.x2;
   } else {
     y = viewWindow.y2;
-    x =
-      Math.floor(Math.random() * (viewWindow.x2 - viewWindow.x1 + 1)) +
+    x = Math.floor(Math.random() * (viewWindow.x2 - viewWindow.x1 + 1)) +
       viewWindow.x2;
   }
 
@@ -74,15 +70,15 @@ function chooseRandomEdgeCoords() {
 function transitionElement(
   element: HTMLElement,
   registerTimout: boolean,
-  x: number,
-  y: number,
+  x: string,
+  y: string,
   rotation: number | null = null,
   zIndex: number | null = null,
 ) {
   const id = parseInt(element.id);
   element.style.transition = "0.5s";
-  element.style.setProperty("--x", `${x}px`);
-  element.style.setProperty("--y", `${y}px`);
+  element.style.setProperty("--x", x);
+  element.style.setProperty("--y", y);
 
   if (rotation) {
     element.style.setProperty("--rotation", `${rotation}deg`);
@@ -198,13 +194,27 @@ webSocket.onmessage = async (e) => {
     // Received update for magnet within our window
     const element = document.getElementById(`${update[0]}`)!;
 
+    const newX = `${update[1]}px`;
+    const newY = `${update[2]}px`;
+    const zIndex = update[4];
+
+    if (
+      element.style.getPropertyValue("--x") === newX &&
+      element.style.getPropertyValue("--y") === newY
+    ) {
+      // don't transition if magnet hasn't moved
+      // in most cases this should be because we initiated the update
+      element.style.zIndex = zIndex.toString();
+      return;
+    }
+
     transitionElement(
       element,
       true,
-      update[1],
-      update[2],
+      newX,
+      newY,
       update[3],
-      update[4],
+      zIndex,
     );
   } else if (update && update.length !== 0) {
     // Received indication that magnet was removed from our window
@@ -212,7 +222,7 @@ webSocket.onmessage = async (e) => {
 
     const [x, y] = chooseRandomEdgeCoords();
 
-    transitionElement(element, false, x, y);
+    transitionElement(element, false, `${x}px`, `${y}px`);
 
     setTimeout(() => {
       door.removeChild(element);
