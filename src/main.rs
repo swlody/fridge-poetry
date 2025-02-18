@@ -63,7 +63,6 @@ fn main() -> Result<()> {
         .with_max_level(config.log_level.as_ref().map_or(Level::DEBUG, |s| {
             Level::from_str(s).unwrap_or_else(|_| panic!("Invalid value for FRIDGE_LOG_LEVEL: {s}"))
         }))
-        .pretty()
         .finish()
         .with(sentry::integrations::tracing::layer())
         .try_init()?;
