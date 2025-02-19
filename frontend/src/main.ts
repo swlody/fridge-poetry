@@ -178,6 +178,12 @@ export class ReconnectingWebSocket {
   }
 
   private connect(): void {
+    if (document.hidden) {
+      return;
+    }
+
+    document.removeEventListener("visibilitychange", this.connect);
+
     this.socket = new WebSocket(this.url, this.protocols);
 
     this.socket.onopen = (event: Event) => {
@@ -205,7 +211,11 @@ export class ReconnectingWebSocket {
         );
         this.reconnectAttempts++;
 
-        setTimeout(() => this.connect(), timeout);
+        if (!document.hidden) {
+          setTimeout(() => this.connect(), timeout);
+        } else {
+          document.addEventListener("visibilitychange", this.connect);
+        }
       }
     };
 
