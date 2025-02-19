@@ -312,30 +312,6 @@ const shareButton = document.getElementById(
   "share-button",
 )! as HTMLButtonElement;
 
-shareButton.onclick = async () => {
-  console.log(navigator.share, " + ", navigator.canShare());
-  if (
-    navigator.share &&
-    navigator.canShare({
-      title: "Fridge Poem",
-      text: "Collaborative fridge poetry",
-      url: globalThis.location.href,
-    })
-  ) {
-    await navigator.share({
-      title: "Fridge Poem",
-      text: "Collaborative fridge poetry",
-      url: globalThis.location.href,
-    });
-  } else {
-    await navigator.clipboard.writeText(globalThis.location.href);
-    shareButton.innerText = "Copied!";
-    setTimeout(() => {
-      shareButton.innerText = "Share location";
-    }, 2000);
-  }
-};
-
 // Don't rerun all this logic if we are reconnecting to lost websocket connection
 function setupWebSocket() {
   let isDraggingWindow = false;
@@ -459,6 +435,14 @@ function setupWebSocket() {
         refreshButton.style.color = "";
         refreshButton.disabled = false;
       }, 1000);
+    });
+
+    shareButton.addEventListener("click", async () => {
+      await navigator.clipboard.writeText(globalThis.location.href);
+      shareButton.innerText = "Copied!";
+      setTimeout(() => {
+        shareButton.innerText = "Share location";
+      }, 2000);
     });
 
     document.addEventListener(
