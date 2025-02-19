@@ -140,7 +140,6 @@ function replaceMagnets(magnetArray: Magnet[]) {
 
 const loaderElement = document.getElementById("loader")!;
 
-// TODO kick people off after some idle time and reconnect on interaction
 export class ReconnectingWebSocket {
   private url: string;
   private protocols: string | string[];
@@ -308,6 +307,17 @@ async function handleWebsocketMessage(e: MessageEvent) {
 const refreshButton = document.getElementById(
   "refresh-button",
 )! as HTMLButtonElement;
+
+const shareButton = document.getElementById(
+  "share-button",
+)! as HTMLButtonElement;
+shareButton.onclick = () => {
+  navigator.clipboard.writeText(globalThis.location.href);
+  shareButton.innerText = "Copied!";
+  setTimeout(() => {
+    shareButton.innerText = "Share location";
+  }, 2000);
+};
 
 // Don't rerun all this logic if we are reconnecting to lost websocket connection
 function setupWebSocket() {
