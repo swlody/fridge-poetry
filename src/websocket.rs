@@ -281,6 +281,8 @@ pub async fn handle_socket(
 
     let mut time_since_last_comms = Instant::now();
 
+    const MAX_IDLE_TIME: Duration = Duration::from_secs(300);
+
     loop {
         match timeout(Duration::from_millis(10000), async {
             select! {
@@ -363,6 +365,12 @@ pub async fn handle_socket(
                 break;
             }
             Err(_) => {
+                if (Instant::now() - time_since_last_comms) > MAX_IDLE_TIME {
+                    let _enter = session.enter();
+                    tracing::debug!("Closing idle WebSocket connection");
+                    break;
+                }
+
                 writer
                     .send(tungstenite::Message::Ping(tungstenite::Bytes::new()))
                     .await
