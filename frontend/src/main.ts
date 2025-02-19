@@ -313,8 +313,20 @@ const shareButton = document.getElementById(
 )! as HTMLButtonElement;
 
 shareButton.onclick = async () => {
-  if (navigator.share && navigator.canShare()) {
-    navigator.share();
+  console.log(navigator.share, " + ", navigator.canShare());
+  if (
+    navigator.share &&
+    navigator.canShare({
+      title: "Fridge Poem",
+      text: "Collaborative fridge poetry",
+      url: globalThis.location.href,
+    })
+  ) {
+    await navigator.share({
+      title: "Fridge Poem",
+      text: "Collaborative fridge poetry",
+      url: globalThis.location.href,
+    });
   } else {
     await navigator.clipboard.writeText(globalThis.location.href);
     shareButton.innerText = "Copied!";
