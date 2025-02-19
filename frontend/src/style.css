@@ -117,21 +117,30 @@ body {
   margin-top: 15px;
 }
 
-footer {
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-  align-items: baseline;
+#about-button {
   position: absolute;
   bottom: 0;
-  left: 0;
   right: 0;
   margin: 10px;
 }
 
+#about-button:hover {
+  cursor: pointer;
+}
+
+#refresh-button {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  margin: 10px;
+}
+
+#refresh-button:hover {
+  cursor: pointer;
+}
+
 button {
   all: unset;
-  cursor: pointer;
 }
 
 .loader {
