@@ -138,31 +138,109 @@ function replaceMagnets(magnetArray: Magnet[]) {
   door.append(newElements);
 }
 
-// TODO reconnect logic
-// TODO kick people off after some idle time and reconnect on interaction
-const webSocket = new WebSocket(WS_URL);
-
 const loaderElement = document.getElementById("loader")!;
-webSocket.onclose = () => {
-  while (door.lastChild) {
-    door.removeChild(door.lastChild);
+
+// TODO kick people off after some idle time and reconnect on interaction
+export class ReconnectingWebSocket {
+  private url: string;
+  private protocols: string | string[];
+  private socket: WebSocket | null;
+  private isConnected: boolean;
+  private reconnectAttempts: number;
+  private maxReconnectAttempts: number;
+  private reconnectInterval: number;
+  private maxReconnectInterval: number;
+
+  public onopen: ((event: Event) => void) | null;
+  public onclose: ((event: CloseEvent) => void) | null;
+  public onreconnect: ((event: Event) => void) | null;
+  public onmessage: ((event: MessageEvent) => void) | null;
+  public onerror: ((event: Event) => void) | null;
+
+  constructor(url: string, protocols: string | string[] = []) {
+    this.url = url;
+    this.protocols = protocols;
+    this.socket = null;
+    this.isConnected = false;
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = 100;
+    this.reconnectInterval = 1000; // Start with 1 second
+    this.maxReconnectInterval = 30000; // Max 30 seconds
+
+    // Initialize event handlers
+    this.onopen = null;
+    this.onclose = null;
+    this.onreconnect = null;
+    this.onmessage = null;
+    this.onerror = null;
+
+    // Initial connection
+    this.connect();
   }
-  door.innerHTML = `<div class="error">
-    <div class="fake-magnet" style="--rotation: 2deg">Lost</div>
-    <div class="fake-magnet" style="--rotation: 1deg">connection</div>
-    <div class="fake-magnet" style="--rotation: 2deg">:(</div>
-    <div class="fake-magnet" style="--rotation: -3deg">please</div>
-    <div class="fake-magnet" style="--rotation: 2deg">refresh</div>
-  </div>`;
-};
 
-webSocket.onerror = () => {
-  webSocket.close();
-};
+  private connect(): void {
+    this.socket = new WebSocket(this.url, this.protocols);
 
-// TODO consider race conditions between this and mouseup replaceMagnets
-// We receive an update to a magnet within our window
-webSocket.onmessage = async (e) => {
+    this.socket.onopen = (event: Event) => {
+      this.reconnectAttempts = 0;
+      this.reconnectInterval = 1000;
+
+      if (!this.isConnected) {
+        // First connection
+        this.isConnected = true;
+        if (this.onopen) this.onopen(event);
+      } else {
+        // Reconnection
+        if (this.onreconnect) this.onreconnect(event);
+      }
+    };
+
+    this.socket.onclose = (event: CloseEvent) => {
+      if (this.onclose) this.onclose(event);
+
+      if (this.reconnectAttempts < this.maxReconnectAttempts) {
+        const timeout = this.reconnectInterval;
+        this.reconnectInterval = Math.min(
+          this.reconnectInterval * 1.5,
+          this.maxReconnectInterval,
+        );
+        this.reconnectAttempts++;
+
+        setTimeout(() => this.connect(), timeout);
+      }
+    };
+
+    this.socket.onmessage = (event: MessageEvent) => {
+      if (this.onmessage) this.onmessage(event);
+    };
+
+    this.socket.onerror = (event: Event) => {
+      if (this.onerror) this.onerror(event);
+    };
+  }
+
+  public send(
+    data: string | ArrayBufferLike | Blob | ArrayBufferView,
+  ): boolean {
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      this.socket.send(data);
+      return true;
+    }
+    return false;
+  }
+
+  public close(code: number = 1000, reason: string = ""): void {
+    if (this.socket) {
+      this.reconnectAttempts = this.maxReconnectAttempts; // Prevent reconnect
+      this.socket.close(code, reason);
+    }
+  }
+}
+
+const webSocket = new ReconnectingWebSocket(WS_URL);
+webSocket.onopen = setupWebSocket;
+
+async function handleWebsocketMessage(e: MessageEvent) {
   // gross untyped nonsense, yuck yuck yuck
   const update = unpack(await e.data.arrayBuffer());
 
@@ -225,22 +303,14 @@ webSocket.onmessage = async (e) => {
       door.removeChild(element);
     }, 500);
   }
-};
+}
 
 const refreshButton = document.getElementById(
   "refresh-button",
 )! as HTMLButtonElement;
 
 // Don't rerun all this logic if we are reconnecting to lost websocket connection
-let hasAlreadyOpened = false;
-webSocket.onopen = () => {
-  if (hasAlreadyOpened) {
-    // Re-request the whole window in case stuff was lost while disconnected
-    updateCoordinatesFromHash();
-    return;
-  }
-  hasAlreadyOpened = true;
-
+function setupWebSocket() {
   let isDraggingWindow = false;
 
   // starting x, y of cursor relative to world origin
@@ -255,6 +325,22 @@ webSocket.onopen = () => {
   let originalCenterY = 0;
 
   let resizeTimer: number | null = null;
+
+  webSocket.onmessage = handleWebsocketMessage;
+  webSocket.onclose = () => {
+    while (door.lastElementChild) {
+      door.removeChild(door.lastElementChild);
+    }
+    door.appendChild(loaderElement);
+  };
+
+  webSocket.onreconnect = () => {
+    updateCoordinatesFromHash();
+    door.removeChild(loaderElement);
+  };
+
+  // Re-request the whole window in case stuff was lost while disconnected
+  updateCoordinatesFromHash();
 
   function makeNewHash() {
     const randomX = Math.round(Math.random() * 20000 - 10000);
@@ -484,4 +570,4 @@ webSocket.onopen = () => {
       { passive: true },
     );
   }
-};
+}

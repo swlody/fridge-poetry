@@ -1,6 +1,6 @@
 import { pack } from "msgpackr";
 
-import { scale } from "./main.ts";
+import { scale, ReconnectingWebSocket } from "./main.ts";
 
 export let clickedElement: HTMLElement | null = null;
 export let isDraggingMagnet = false;
@@ -29,7 +29,7 @@ export class Magnet {
     this.word = word;
   }
 
-  toElement(webSocket: WebSocket): HTMLElement {
+  toElement(webSocket: ReconnectingWebSocket): HTMLElement {
     const element = document.createElement("div");
 
     element.id = this.id.toString();
@@ -81,7 +81,10 @@ function packedMagnetUpdate(
   return pack([true, id, x, y, rotation]);
 }
 
-function setupEventListeners(element: HTMLElement, webSocket: WebSocket) {
+function setupEventListeners(
+  element: HTMLElement,
+  webSocket: ReconnectingWebSocket,
+) {
   let startX = 0;
   let startY = 0;
 
