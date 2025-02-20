@@ -144,14 +144,12 @@ export class ReconnectingWebSocket {
   private url: string;
   private protocols: string | string[];
   private socket: WebSocket | null;
-  private isConnected: boolean;
   private hasConnectedBefore: boolean;
   private reconnectAttempts: number;
   private maxReconnectAttempts: number;
   private reconnectInterval: number;
   private maxReconnectInterval: number;
   private reconnectTimeoutId: number | null;
-  private isClosing: boolean;
   private visibilityChangeHandler: (event: Event) => void;
 
   public onopen: ((event: Event) => void) | null;
@@ -164,39 +162,27 @@ export class ReconnectingWebSocket {
     this.url = url;
     this.protocols = protocols;
     this.socket = null;
-    this.isConnected = false;
     this.hasConnectedBefore = false;
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 100;
     this.reconnectInterval = 1000;
     this.maxReconnectInterval = 30000;
     this.reconnectTimeoutId = null;
-    this.isClosing = false;
 
-    // Initialize event handlers
     this.onopen = null;
     this.onclose = null;
     this.onreconnect = null;
     this.onmessage = null;
     this.onerror = null;
 
-    this.visibilityChangeHandler = this.handleVisibilityChange;
+    this.visibilityChangeHandler = this.handleVisibilityChange.bind(this);
     document.addEventListener("visibilitychange", this.visibilityChangeHandler);
 
-    // Initial connection
     this.connect();
   }
 
-  private handleVisibilityChange() {
-    if (!document.hidden) {
-      if (!this.isConnected && !this.isClosing) {
-        this.connect();
-      }
-    }
-  }
-
   private connect() {
-    if (document.hidden) {
+    if (document.hidden || this.socket?.readyState === WebSocket.OPEN) {
       return;
     }
 
@@ -205,7 +191,9 @@ export class ReconnectingWebSocket {
       this.reconnectTimeoutId = null;
     }
 
+    console.log("trying connect");
     this.socket = new WebSocket(this.url, this.protocols);
+    this.scheduleReconnect();
 
     this.socket.onopen = (event: Event) => {
       this.reconnectAttempts = 0;
@@ -213,16 +201,13 @@ export class ReconnectingWebSocket {
 
       if (!this.hasConnectedBefore) {
         this.hasConnectedBefore = true;
-        this.isConnected = true;
         if (this.onopen) this.onopen(event);
-      } else if (!this.isConnected) {
-        this.isConnected = true;
+      } else {
         if (this.onreconnect) this.onreconnect(event);
       }
     };
 
     this.socket.onclose = (event: CloseEvent) => {
-      this.isConnected = false;
       if (this.onclose) this.onclose(event);
 
       if (!document.hidden) {
@@ -239,9 +224,17 @@ export class ReconnectingWebSocket {
     };
   }
 
+  private handleVisibilityChange() {
+    if (!document.hidden && this.socket?.readyState !== WebSocket.OPEN) {
+      this.reconnectAttempts = 0;
+      this.reconnectInterval = 1000;
+      this.connect();
+    }
+  }
+
   private scheduleReconnect() {
     if (
-      this.isClosing ||
+      this.socket?.readyState === WebSocket.OPEN ||
       document.hidden ||
       this.reconnectAttempts >= this.maxReconnectAttempts
     ) {
@@ -269,13 +262,6 @@ export class ReconnectingWebSocket {
       return true;
     }
     return false;
-  }
-
-  public close(code: number = 1000, reason: string = ""): void {
-    if (this.socket) {
-      this.reconnectAttempts = this.maxReconnectAttempts; // Prevent reconnect
-      this.socket.close(code, reason);
-    }
   }
 }
 
@@ -434,7 +420,7 @@ function setupWebSocket() {
   globalThis.addEventListener("hashchange", updateCoordinatesFromHash);
   updateCoordinatesFromHash();
 
-  document.body.removeChild(loaderElement);
+  door.removeChild(loaderElement);
 
   const evCache: PointerEvent[] = [];
   let prevDiff = -1;
