@@ -2,19 +2,19 @@ use std::time::{Duration, Instant};
 
 use anyhow::bail;
 use futures_util::{
-    stream::{SplitSink, SplitStream},
     SinkExt as _, StreamExt,
+    stream::{SplitSink, SplitStream},
 };
 use serde::{Deserialize, Serialize};
 use tokio::{net::TcpStream, select, time::timeout};
-use tokio_tungstenite::{tungstenite, tungstenite::Message, WebSocketStream};
+use tokio_tungstenite::{WebSocketStream, tungstenite, tungstenite::Message};
 use tracing::Level;
 use uuid::Uuid;
 
 use crate::{
+    FridgeError,
     geometry::{Shape, Window},
     state::{AppState, PgMagnetUpdate},
-    FridgeError,
 };
 
 type WsStream = SplitStream<WebSocketStream<TcpStream>>;

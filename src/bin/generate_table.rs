@@ -3,7 +3,7 @@ use std::{
     io::{BufRead as _, BufReader},
 };
 
-use rand::{seq::IndexedRandom as _, Rng as _, SeedableRng};
+use rand::{Rng as _, SeedableRng, seq::IndexedRandom as _};
 
 const NUM_MAGNETS: i32 = 20_000_000;
 const MAX_X: i32 = 500_000;
