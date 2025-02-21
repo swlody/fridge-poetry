@@ -157,6 +157,7 @@ export class ReconnectingWebSocket {
   public onreconnect: ((event: Event) => void) | null;
   public onmessage: ((event: MessageEvent) => void) | null;
   public onerror: ((event: Event) => void) | null;
+  public ontimeout: ((event: CloseEvent) => void) | null;
 
   constructor(url: string, protocols: string | string[] = []) {
     this.url = url;
@@ -174,6 +175,7 @@ export class ReconnectingWebSocket {
     this.onreconnect = null;
     this.onmessage = null;
     this.onerror = null;
+    this.ontimeout = null;
 
     this.visibilityChangeHandler = this.handleVisibilityChange.bind(this);
     document.addEventListener("visibilitychange", this.visibilityChangeHandler);
@@ -211,8 +213,8 @@ export class ReconnectingWebSocket {
 
       if (!document.hidden) {
         if (event.code === 1001) {
-          // Away code implies idle timeout
-          // TODO show reconnect button or something instead of spinny wheel
+          // Away code = server idle timeout
+          if (this.ontimeout) this.ontimeout(event);
         } else {
           this.scheduleReconnect();
         }
@@ -337,13 +339,25 @@ async function handleWebsocketMessage(e: MessageEvent) {
   }
 }
 
-const refreshButton = document.getElementById(
-  "refresh-button",
+const newAreaButton = document.getElementById(
+  "new-area-button",
 )! as HTMLButtonElement;
 
 const shareButton = document.getElementById(
   "share-button",
 )! as HTMLButtonElement;
+
+const reloadButton = document.createElement("button");
+reloadButton.className = "fake-magnet";
+reloadButton.style.setProperty("--rotation", "2deg");
+reloadButton.style.position = "absolute";
+reloadButton.style.top = "50%";
+reloadButton.style.left = "50%";
+reloadButton.style.transform = "translate(-50%, -50%)";
+reloadButton.innerText = "Connection lost, click to reload";
+reloadButton.addEventListener("click", () => {
+  location.reload();
+});
 
 // Don't rerun all this logic if we are reconnecting to lost websocket connection
 function setupWebSocket() {
@@ -373,6 +387,13 @@ function setupWebSocket() {
   webSocket.onreconnect = () => {
     updateCoordinatesFromHash();
     door.removeChild(loaderElement);
+  };
+
+  webSocket.ontimeout = () => {
+    while (door.lastElementChild) {
+      door.removeChild(door.lastElementChild);
+    }
+    door.appendChild(reloadButton);
   };
 
   // Re-request the whole window in case stuff was lost while disconnected
@@ -457,16 +478,16 @@ function setupWebSocket() {
   requestAnimationFrame(zoomAnimation);
 
   function setupDocumentEventListeners() {
-    refreshButton.addEventListener("click", () => {
+    newAreaButton.addEventListener("click", () => {
       makeNewHash();
       updateCoordinatesFromHash();
 
-      refreshButton.disabled = true;
-      refreshButton.style.color = "darkgray";
+      newAreaButton.disabled = true;
+      newAreaButton.style.color = "darkgray";
 
       setTimeout(() => {
-        refreshButton.style.color = "";
-        refreshButton.disabled = false;
+        newAreaButton.style.color = "";
+        newAreaButton.disabled = false;
       }, 1000);
     });
 
