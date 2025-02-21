@@ -191,7 +191,6 @@ export class ReconnectingWebSocket {
       this.reconnectTimeoutId = null;
     }
 
-    console.log("trying connect");
     this.socket = new WebSocket(this.url, this.protocols);
     this.scheduleReconnect();
 
@@ -211,7 +210,12 @@ export class ReconnectingWebSocket {
       if (this.onclose) this.onclose(event);
 
       if (!document.hidden) {
-        this.scheduleReconnect();
+        if (event.code === 1001) {
+          // Away code implies idle timeout
+          // TODO show reconnect button or something instead of spinny wheel
+        } else {
+          this.scheduleReconnect();
+        }
       }
     };
 

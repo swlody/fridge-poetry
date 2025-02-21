@@ -1,14 +1,19 @@
 use std::time::{Duration, Instant};
 
-use anyhow::bail;
 use futures_util::{
     SinkExt as _, StreamExt,
     stream::{SplitSink, SplitStream},
 };
 use serde::{Deserialize, Serialize};
 use tokio::{net::TcpStream, select, time::timeout};
-use tokio_tungstenite::{WebSocketStream, tungstenite, tungstenite::Message};
-use tracing::Level;
+use tokio_tungstenite::{
+    WebSocketStream,
+    tungstenite::{
+        self, Message, Utf8Bytes,
+        protocol::{CloseFrame, frame::coding::CloseCode},
+    },
+};
+use tracing::{Instrument, Level};
 use uuid::Uuid;
 
 use crate::{
@@ -217,15 +222,15 @@ async fn handle_websocket_binary(
     writer: &mut WsSink,
     state: &AppState,
     session_id: &Uuid,
-) -> Result<(), anyhow::Error> {
+) -> Result<(), FridgeError> {
     let Ok(client_update) = rmp_serde::from_slice(&bytes) else {
-        bail!("Received unknown msgpack");
+        return Err(FridgeError::InvalidMessage(format!("{bytes:?}")));
     };
 
     match client_update {
         ClientUpdate::Window(window_update) => {
             if !window_update.is_valid() {
-                bail!("Received invalid window update: {window_update:?}");
+                return Err(FridgeError::OutOfBounds(format!("{window_update:?}")));
             }
 
             let difference = client_window.difference(&window_update);
@@ -236,29 +241,91 @@ async fn handle_websocket_binary(
                 return Ok(());
             };
 
-            match send_new_magnets(writer, &difference, state).await {
-                Ok(()) => {}
-                Err(FridgeError::Tungstenite(e)) => {
-                    bail!("Unable to send new magnets, disconnecting websocket: {e}");
-                }
-                Err(FridgeError::Sqlx(e)) => {
-                    tracing::error!("Unable to get magnets from database: {e}");
-                }
-            }
+            send_new_magnets(writer, &difference, state).await?;
         }
         ClientUpdate::Magnet(magnet_update) => {
             if !magnet_update.is_valid(client_window) {
-                bail!("Received invalid magnet update: {magnet_update:?}");
+                return Err(FridgeError::OutOfBounds(format!("{magnet_update:?}")));
             }
 
-            if let Err(FridgeError::Sqlx(e)) = update_magnet(magnet_update, session_id, state).await
-            {
-                bail!("Unable to update magnet in databse: {e}");
-            }
+            update_magnet(magnet_update, session_id, state).await?;
         }
     }
 
     Ok(())
+}
+
+async fn close_with(writer: &mut WsSink, error: FridgeError) -> bool {
+    match error {
+        e @ FridgeError::Shutdown => {
+            tracing::debug!("{e}");
+            let _ = writer
+                .send(Message::Close(Some(CloseFrame {
+                    code: CloseCode::Restart,
+                    reason: Utf8Bytes::from_static(""),
+                })))
+                .await;
+            true
+        }
+        e @ FridgeError::IdleTimeout => {
+            tracing::debug!("{e}");
+            let _ = writer
+                .send(Message::Close(Some(CloseFrame {
+                    code: CloseCode::Away,
+                    reason: Utf8Bytes::from_static(""),
+                })))
+                .await;
+            true
+        }
+        e @ FridgeError::InvalidMessage(_) => {
+            tracing::debug!("{e}");
+            let _ = writer
+                .send(Message::Close(Some(CloseFrame {
+                    code: CloseCode::Invalid,
+                    reason: Utf8Bytes::from_static(""),
+                })))
+                .await;
+            true
+        }
+        e @ FridgeError::Tungstenite(_) => {
+            tracing::debug!("{e}");
+            let _ = writer
+                .send(Message::Close(Some(CloseFrame {
+                    code: CloseCode::Protocol,
+                    reason: Utf8Bytes::from_static(""),
+                })))
+                .await;
+            true
+        }
+        e @ FridgeError::Sqlx(sqlx::Error::RowNotFound) | e @ FridgeError::OutOfBounds(_) => {
+            tracing::debug!("{e}");
+            let _ = writer
+                .send(Message::Close(Some(CloseFrame {
+                    code: CloseCode::Policy,
+                    reason: Utf8Bytes::from_static(""),
+                })))
+                .await;
+            true
+        }
+        e @ FridgeError::Other(_) | e @ FridgeError::Sqlx(_) => {
+            tracing::error!("{e}");
+            let _ = writer
+                .send(Message::Close(Some(CloseFrame {
+                    code: CloseCode::Error,
+                    reason: Utf8Bytes::from_static(""),
+                })))
+                .await;
+            true
+        }
+        e @ FridgeError::ClientClose(_) => {
+            tracing::debug!("{e}");
+            true
+        }
+        e @ FridgeError::RateLimited => {
+            tracing::debug!("{e}");
+            false
+        }
+    }
 }
 
 pub async fn handle_socket(
@@ -287,14 +354,13 @@ pub async fn handle_socket(
         match timeout(Duration::from_millis(10000), async {
             select! {
                 () = state.token.cancelled() => {
-                    let _ = writer.close().await;
-                    bail!("Shutdown");
+                    return Err(FridgeError::Shutdown);
                 }
 
                 // Update to a magnet entity from Postgres
                 magnet_update = rx.recv() => {
                     let _enter = session.enter();
-                    let magnet_update = magnet_update?;
+                    let magnet_update = magnet_update.map_err(anyhow::Error::from)?;
                     send_relevant_update(&mut writer, &client_window, magnet_update).await?;
                 }
 
@@ -303,18 +369,13 @@ pub async fn handle_socket(
 
                     // rate limiting - if the nth to last request was less than a second ago, ignore the new one.
                     let now = Instant::now();
-
-                    if (now - time_since_last_comms).as_secs() > 600 {
-                        bail!("Idle connection");
-                    }
                     time_since_last_comms = now;
 
                     if let Some(timestamp) = last_n_requests[current_request_index] {
                         if (now - timestamp).as_millis() >= 1000 {
                             last_n_requests[current_request_index] = Some(now);
                         } else {
-                            tracing::warn!("Client exceeding rate limit, ignoring request");
-                            return Ok(());
+                            return Err(FridgeError::RateLimited);
                         }
                     } else {
                         last_n_requests[current_request_index] = Some(now);
@@ -339,16 +400,16 @@ pub async fn handle_socket(
                             return Ok(());
                         }
                         Some(Ok(Message::Close(close))) => {
-                            bail!("WebSocket closed by client: {close:?}");
+                            return Err(FridgeError::ClientClose(close));
                         }
                         Some(Ok(thing)) => {
-                            bail!("Received unexpected message over websocket: {thing:?}");
+                            return Err(FridgeError::InvalidMessage(format!("{thing:?}")));
                         }
                         Some(Err(e)) => {
-                            bail!("Websocket error: {e}");
+                            return Err(FridgeError::InvalidMessage(e.to_string()));
                         }
                         None => {
-                            bail!("Received empty message over websocket");
+                            return Err(FridgeError::InvalidMessage(String::new()))
                         }
                     }
                 }
@@ -360,14 +421,15 @@ pub async fn handle_socket(
         {
             Ok(Ok(())) => {}
             Ok(Err(e)) => {
-                let _enter = session.enter();
-                tracing::debug!("Closing WebSocket connection: {e}");
-                break;
+                if close_with(&mut writer, e).instrument(session.clone()).await {
+                    break;
+                }
             }
             Err(_) => {
                 if (Instant::now() - time_since_last_comms) > MAX_IDLE_TIME {
-                    let _enter = session.enter();
-                    tracing::debug!("Closing idle WebSocket connection");
+                    close_with(&mut writer, FridgeError::IdleTimeout)
+                        .instrument(session.clone())
+                        .await;
                     break;
                 }
 

@@ -44,13 +44,34 @@ pub struct Config {
     pub database_url: SecretString,
 }
 
-#[derive(Error, Debug)]
-pub enum FridgeError {
-    #[error(transparent)]
-    Sqlx(#[from] sqlx::Error),
+#[derive(Debug, Error)]
+enum FridgeError {
+    #[error("Server shutting down")]
+    Shutdown,
+
+    #[error("Request exceeds rate limits")]
+    RateLimited,
+
+    #[error("WebSocket connection closed by client: {0:?}")]
+    ClientClose(Option<tungstenite::protocol::frame::CloseFrame>),
+
+    #[error("Closing connection due to idle timeout")]
+    IdleTimeout,
+
+    #[error("Invalid message received over WebSocket: {0}")]
+    InvalidMessage(String),
+
+    #[error("Out of bounds update: {0}")]
+    OutOfBounds(String),
 
     #[error(transparent)]
     Tungstenite(#[from] tungstenite::Error),
+
+    #[error(transparent)]
+    Sqlx(#[from] sqlx::Error),
+
+    #[error("Internal server error: {0}")]
+    Other(#[from] anyhow::Error),
 }
 
 fn main() -> Result<()> {
