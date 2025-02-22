@@ -1,5 +1,6 @@
 import { pack, unpack } from "msgpackr";
 import * as ease from "easing-utils";
+import * as uuid from "uuid";
 
 import {
   clickedElement,
@@ -273,6 +274,7 @@ export class ReconnectingWebSocket {
 
 const webSocket = new ReconnectingWebSocket(WS_URL);
 webSocket.onopen = setupWebSocket;
+const sessionIdDiv = document.getElementById("session-id")! as HTMLDivElement;
 
 async function handleWebsocketMessage(e: MessageEvent) {
   // gross untyped nonsense, yuck yuck yuck
@@ -287,6 +289,11 @@ async function handleWebsocketMessage(e: MessageEvent) {
     }
     replaceMagnets(magnets);
   } else if (update[5] !== undefined) {
+    if (uuid.validate(update)) {
+      sessionIdDiv.innerText = update;
+      return;
+    }
+
     // New object arriving from out of bounds, create it
     const [x, y] = chooseRandomEdgeCoords();
 
