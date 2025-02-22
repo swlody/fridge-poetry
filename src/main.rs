@@ -139,7 +139,7 @@ async fn broadcast_changes(
                         }
                     }
                     Err(e) => {
-                        tracing::error!("Error from listener: {}", e);
+                        tracing::error!("Error from listener: {e}");
                     }
                 }
             }
@@ -189,7 +189,7 @@ async fn run(config: Config) -> Result<()> {
                         tracker.spawn(accept_connection(stream, app_state.clone()));
                     }
                     Err(e) => {
-                        tracing::warn!("Error accepting connection: {}", e);
+                        tracing::warn!("Error accepting connection: {e}");
                     }
                 }
             }
@@ -210,6 +210,8 @@ async fn run(config: Config) -> Result<()> {
     Ok(())
 }
 
+// TODO tokio-websockets scales better with many connections
+// https://github.com/Gelbpunkt/tokio-websockets
 async fn accept_connection(stream: TcpStream, state: AppState) {
     let peer_addr = stream
         .peer_addr()
@@ -225,7 +227,7 @@ async fn accept_connection(stream: TcpStream, state: AppState) {
             websocket::handle_socket(reader, writer, session_id, state).await;
         }
         Err(e) => {
-            tracing::warn!("Unable to open websocket connection: {}", e);
+            tracing::warn!("Unable to open websocket connection: {e}");
         }
     }
 }
