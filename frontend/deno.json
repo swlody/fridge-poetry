@@ -17,6 +17,7 @@
     "@deno/vite-plugin": "npm:@deno/vite-plugin@^1.0.0",
     "easing-utils": "npm:easing-utils@^1.0.0",
     "msgpackr": "npm:msgpackr@^1.11.2",
+    "uuid": "npm:uuid@^11.1.0",
     "vite": "npm:vite@^6.0.1"
   },
   "nodeModulesDir": "auto"

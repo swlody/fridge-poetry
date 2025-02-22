@@ -51,6 +51,7 @@ enum MagnetUpdate {
     Move(LocationUpdate),
     Remove(i32),
     CanvasUpdate(Vec<Magnet>),
+    SessionIdUpdate(String),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -338,6 +339,16 @@ pub async fn handle_socket(
         scope.set_tag("session_id", session_id);
     });
     let session = tracing::span!(Level::DEBUG, "session", id = session_id.to_string());
+
+    {
+        let session_id_update = MagnetUpdate::SessionIdUpdate(session_id.to_string());
+        let buf = rmp_serde::to_vec(&session_id_update).unwrap();
+        tracing::warn!("Senidng!!");
+        if writer.send(buf.into()).await.is_err() {
+            tracing::debug!("Unable to establish connnection");
+            return;
+        }
+    }
 
     let mut rx = state.magnet_updates.subscribe();
     let mut client_window = Window::default();
