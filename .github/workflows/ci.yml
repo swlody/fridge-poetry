@@ -21,6 +21,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # TODO this doesn't actually work oops
       - name: Cache Deno dependencies
         uses: actions/cache@v4
         with:
