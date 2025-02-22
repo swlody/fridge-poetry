@@ -1,3 +1,4 @@
+mod error;
 mod geometry;
 mod state;
 mod websocket;
@@ -10,13 +11,11 @@ use mimalloc::MiMalloc;
 use secrecy::{ExposeSecret as _, SecretString};
 use serde::Deserialize;
 use sqlx::postgres::PgListener;
-use thiserror::Error;
 use tokio::{
     net::{TcpListener, TcpStream},
     select, signal,
     sync::broadcast,
 };
-use tokio_tungstenite::tungstenite;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use tracing::Level;
 use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
@@ -42,36 +41,6 @@ pub struct Config {
 
     pub sentry_dsn: Option<SecretString>,
     pub database_url: SecretString,
-}
-
-#[derive(Debug, Error)]
-enum FridgeError {
-    #[error("Server shutting down")]
-    Shutdown,
-
-    #[error("Request exceeds rate limits")]
-    RateLimited,
-
-    #[error("WebSocket connection closed by client: {0:?}")]
-    ClientClose(Option<tungstenite::protocol::frame::CloseFrame>),
-
-    #[error("Closing connection due to idle timeout")]
-    IdleTimeout,
-
-    #[error("Invalid message received over WebSocket: {0}")]
-    InvalidMessage(String),
-
-    #[error("Out of bounds update: {0}")]
-    OutOfBounds(String),
-
-    #[error(transparent)]
-    Tungstenite(#[from] tungstenite::Error),
-
-    #[error(transparent)]
-    Sqlx(#[from] sqlx::Error),
-
-    #[error("Internal server error: {0}")]
-    Other(#[from] anyhow::Error),
 }
 
 fn main() -> Result<()> {

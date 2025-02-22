@@ -8,16 +8,13 @@ use serde::{Deserialize, Serialize};
 use tokio::{net::TcpStream, select, time::timeout};
 use tokio_tungstenite::{
     WebSocketStream,
-    tungstenite::{
-        self, Message, Utf8Bytes,
-        protocol::{CloseFrame, frame::coding::CloseCode},
-    },
+    tungstenite::{self, Message},
 };
 use tracing::{Instrument, Level};
 use uuid::Uuid;
 
 use crate::{
-    FridgeError,
+    error::FridgeError,
     geometry::{Shape, Window},
     state::{AppState, PgMagnetUpdate},
 };
@@ -223,9 +220,7 @@ async fn handle_websocket_binary(
     state: &AppState,
     session_id: &Uuid,
 ) -> Result<(), FridgeError> {
-    let Ok(client_update) = rmp_serde::from_slice(&bytes) else {
-        return Err(FridgeError::InvalidMessage(format!("{bytes:?}")));
-    };
+    let client_update = rmp_serde::from_slice(&bytes)?;
 
     match client_update {
         ClientUpdate::Window(window_update) => {
@@ -256,76 +251,26 @@ async fn handle_websocket_binary(
 }
 
 async fn close_with(writer: &mut WsSink, error: FridgeError) -> bool {
-    match error {
-        e @ FridgeError::Shutdown => {
+    match &error {
+        e @ FridgeError::ClientClose(_) => {
             tracing::debug!("{e}");
-            let _ = writer
-                .send(Message::Close(Some(CloseFrame {
-                    code: CloseCode::Restart,
-                    reason: Utf8Bytes::from_static(""),
-                })))
-                .await;
-            true
-        }
-        e @ FridgeError::IdleTimeout => {
-            tracing::debug!("{e}");
-            let _ = writer
-                .send(Message::Close(Some(CloseFrame {
-                    code: CloseCode::Away,
-                    reason: Utf8Bytes::from_static(""),
-                })))
-                .await;
-            true
-        }
-        e @ FridgeError::InvalidMessage(_) => {
-            tracing::debug!("{e}");
-            let _ = writer
-                .send(Message::Close(Some(CloseFrame {
-                    code: CloseCode::Invalid,
-                    reason: Utf8Bytes::from_static(""),
-                })))
-                .await;
-            true
-        }
-        e @ FridgeError::Tungstenite(_) => {
-            tracing::debug!("{e}");
-            let _ = writer
-                .send(Message::Close(Some(CloseFrame {
-                    code: CloseCode::Protocol,
-                    reason: Utf8Bytes::from_static(""),
-                })))
-                .await;
-            true
-        }
-        e @ FridgeError::Sqlx(sqlx::Error::RowNotFound) | e @ FridgeError::OutOfBounds(_) => {
-            tracing::debug!("{e}");
-            let _ = writer
-                .send(Message::Close(Some(CloseFrame {
-                    code: CloseCode::Policy,
-                    reason: Utf8Bytes::from_static(""),
-                })))
-                .await;
-            true
+            return true;
         }
         e @ FridgeError::Other(_) | e @ FridgeError::Sqlx(_) => {
             tracing::error!("{e}");
-            let _ = writer
-                .send(Message::Close(Some(CloseFrame {
-                    code: CloseCode::Error,
-                    reason: Utf8Bytes::from_static(""),
-                })))
-                .await;
-            true
         }
-        e @ FridgeError::ClientClose(_) => {
+        e => {
             tracing::debug!("{e}");
-            true
-        }
-        e @ FridgeError::RateLimited => {
-            tracing::debug!("{e}");
-            false
         }
     }
+
+    if let Some(close_frame) = error.to_close_frame() {
+        let _ = writer.send(Message::Close(Some(close_frame))).await;
+        return true;
+    }
+
+    // Just rate limited
+    false
 }
 
 pub async fn handle_socket(
@@ -376,10 +321,7 @@ pub async fn handle_socket(
                 message = reader.next() => {
                     let _enter = session.enter();
 
-                    // rate limiting - if the nth to last request was less than a second ago, ignore the new one.
                     let now = Instant::now();
-                    time_since_last_comms = now;
-
                     if let Some(timestamp) = last_n_requests[current_request_index] {
                         if (now - timestamp).as_millis() >= 1000 {
                             last_n_requests[current_request_index] = Some(now);
@@ -396,6 +338,8 @@ pub async fn handle_socket(
 
                     match message {
                         Some(Ok(Message::Binary(bytes))) => {
+                            // rate limiting - if the nth to last request was less than a second ago, ignore the new one.
+                            time_since_last_comms = now;
                             handle_websocket_binary(
                                 bytes,
                                 &mut client_window,
@@ -412,13 +356,13 @@ pub async fn handle_socket(
                             return Err(FridgeError::ClientClose(close));
                         }
                         Some(Ok(thing)) => {
-                            return Err(FridgeError::InvalidMessage(format!("{thing:?}")));
+                            return Err(FridgeError::UnsupportedMessage(format!("{thing:?}")));
                         }
                         Some(Err(e)) => {
-                            return Err(FridgeError::InvalidMessage(e.to_string()));
+                            return Err(FridgeError::Tungstenite(e));
                         }
                         None => {
-                            return Err(FridgeError::InvalidMessage(String::new()))
+                            return Err(FridgeError::ClientClose(None));
                         }
                     }
                 }
@@ -442,10 +386,15 @@ pub async fn handle_socket(
                     break;
                 }
 
-                writer
+                if let Err(e) = writer
                     .send(tungstenite::Message::Ping(tungstenite::Bytes::new()))
                     .await
-                    .unwrap();
+                {
+                    close_with(&mut writer, FridgeError::Tungstenite(e))
+                        .instrument(session.clone())
+                        .await;
+                    break;
+                }
             }
         }
     }
