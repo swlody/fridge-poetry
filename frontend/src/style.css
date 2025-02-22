@@ -103,16 +103,20 @@ body {
 }
 
 [popover] {
+  border: none;
   background: none;
-  border-color: darkgray;
-  border-width: 2px;
-  backdrop-filter: blur(5px);
+}
+
+#popover-container:has(> :popover-open) {
+  backdrop-filter: blur(3px);
+  position: absolute;
+  width: 100%;
+  height: 100%;
 }
 
 #about-dialog {
   user-select: none;
   -webkit-user-select: none;
-  padding: 25px;
 }
 
 #about-inner {
