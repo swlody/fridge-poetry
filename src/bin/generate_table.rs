@@ -34,11 +34,7 @@ fn main() {
         };
 
         writer
-            .write_record(&[
-                format!("({},{})", x, y),
-                rotation.to_string(),
-                word.to_string(),
-            ])
+            .write_record(&[format!("({x},{y})"), rotation.to_string(), word.to_string()])
             .unwrap();
     }
 
@@ -50,7 +46,7 @@ fn main() {
         let rotation = rng.random_range(-5..=5);
 
         writer
-            .write_record(&[format!("({},{})", x, y), rotation.to_string(), word.clone()])
+            .write_record(&[format!("({x},{y})"), rotation.to_string(), word.clone()])
             .unwrap();
     }
 }
