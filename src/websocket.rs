@@ -199,7 +199,6 @@ async fn update_magnet(
     session_id: &Uuid,
     state: &AppState,
 ) -> Result<(), FridgeError> {
-    // TODO coherence checks: inside area bounds and rotation within correct range
     sqlx::query!(
         r#"UPDATE magnets
            SET coords = Point($1::int, $2::int), rotation = $3, z_index = nextval('magnets_z_index_seq'), last_modifier = $4
