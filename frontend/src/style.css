@@ -110,18 +110,20 @@ body {
 #about-dialog {
   user-select: none;
   -webkit-user-select: none;
+  position: absolute;
 }
 
-#about-bottom {
-  margin-left: 40%;
-  margin-top: 15px;
+#about-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
 }
 
 footer {
   display: flex;
   flex-direction: row;
   justify-content: space-between;
-  align-items: baseline;
   position: absolute;
   bottom: 0;
   left: 0;
