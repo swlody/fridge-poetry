@@ -343,7 +343,6 @@ pub async fn handle_socket(
     {
         let session_id_update = MagnetUpdate::SessionIdUpdate(session_id.to_string());
         let buf = rmp_serde::to_vec(&session_id_update).unwrap();
-        tracing::warn!("Senidng!!");
         if writer.send(buf.into()).await.is_err() {
             tracing::debug!("Unable to establish connnection");
             return;
