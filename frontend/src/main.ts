@@ -1,6 +1,6 @@
 import { pack, unpack } from "msgpackr";
 import * as ease from "easing-utils";
-import * as uuid from "uuid";
+import * as uuidv7 from "jsr:@std/uuid/unstable-v7";
 
 import {
   clickedElement,
@@ -276,6 +276,7 @@ const webSocket = new ReconnectingWebSocket(WS_URL);
 webSocket.onopen = setupWebSocket;
 const sessionIdDiv = document.getElementById("session-id")! as HTMLDivElement;
 
+// TODO please please use zod on this or something
 async function handleWebsocketMessage(e: MessageEvent) {
   // gross untyped nonsense, yuck yuck yuck
   const update = unpack(await e.data.arrayBuffer());
@@ -289,7 +290,7 @@ async function handleWebsocketMessage(e: MessageEvent) {
     }
     replaceMagnets(magnets);
   } else if (update[5] !== undefined) {
-    if (uuid.validate(update)) {
+    if (uuidv7.validate(update)) {
       sessionIdDiv.innerText = update;
       return;
     }

@@ -105,12 +105,12 @@ body {
 [popover] {
   background: none;
   border: none;
+  backdrop-filter: blur(5px);
 }
 
 #about-dialog {
   user-select: none;
   -webkit-user-select: none;
-  position: absolute;
 }
 
 #about-inner {

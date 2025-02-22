@@ -9,7 +9,6 @@
     "npm:easing-utils@1": "1.0.0",
     "npm:msgpackr@^1.11.2": "1.11.2",
     "npm:prettier@*": "3.5.0",
-    "npm:uuid@^11.1.0": "11.1.0",
     "npm:vite@*": "6.1.0_@types+node@22.5.4",
     "npm:vite@^6.0.1": "6.1.0_@types+node@22.5.4"
   },
@@ -306,9 +305,6 @@
     "undici-types@6.19.8": {
       "integrity": "sha512-ve2KP6f/JnbPBFyobGHuerC9g1FYGn/F8n1LWTwNxCEzd6IfqTwUQcNXgEtmmQ6DlRrC1hrSrBnCZPokRrDHjw=="
     },
-    "uuid@11.1.0": {
-      "integrity": "sha512-0/A9rDy9P7cJ+8w1c9WD9V//9Wj15Ce2MPz8Ri6032usz+NfePxx5AcN3bN+r6ZL6jEo066/yNYB3tn4pQEx+A=="
-    },
     "vite@6.1.0": {
       "integrity": "sha512-RjjMipCKVoR4hVfPY6GQTgveinjNuyLw+qruksLDvA5ktI1150VmcMBKmQaEWJhg/j6Uaf6dNCNA0AfdzUb/hQ==",
       "dependencies": [
@@ -334,7 +330,6 @@
       "npm:@deno/vite-plugin@1",
       "npm:easing-utils@1",
       "npm:msgpackr@^1.11.2",
-      "npm:uuid@^11.1.0",
       "npm:vite@^6.0.1"
     ]
   }
