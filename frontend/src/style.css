@@ -104,13 +104,15 @@ body {
 
 [popover] {
   background: none;
-  border: none;
+  border-color: darkgray;
+  border-width: 2px;
   backdrop-filter: blur(5px);
 }
 
 #about-dialog {
   user-select: none;
   -webkit-user-select: none;
+  padding: 25px;
 }
 
 #about-inner {
