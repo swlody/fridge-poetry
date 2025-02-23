@@ -89,36 +89,32 @@ async fn broadcast_changes(
     broadcast_capacity: usize,
 ) -> Result<(), FridgeError> {
     loop {
-        select! {
-            res = pg_change_listener.try_recv() => {
-                match res {
-                    Ok(Some(msg)) => {
-                        let magnet_update = serde_json::from_str(msg.payload()).expect("Received invalid JSON from postgres");
-                        if tx.len() >= broadcast_capacity {
-                            tracing::error!(
-                                "Potentially dropping queued magnet updates. \
-                                Consider increasing the capacity of the broadcast channel. \
-                                Current capacity: {broadcast_capacity}"
-                            );
-                        }
-
-                        if tx.send(magnet_update).is_err() {
-                            tracing::warn!("Tried broadcasting magnet update but no receivers present.");
-                        }
-                    }
-                    Ok(None) => {
-                        tracing::warn!("Temporarily lost connection to Postgres");
-                    }
-                    Err(sqlx::Error::PoolClosed) => {
-                        return Ok(());
-                    }
-                    Err(e) => {
-                        // TODO handle sqlx::Error::Io(std::io::Error::ErrorKind::ConnectionReset)?
-                        token.cancel();
-                        tracing::error!("{e}");
-                        return Err(FridgeError::Sqlx(e));
-                    }
+        match pg_change_listener.try_recv().await {
+            Ok(Some(msg)) => {
+                let magnet_update = serde_json::from_str(msg.payload())
+                    .expect("Received invalid JSON from postgres");
+                if tx.len() >= broadcast_capacity {
+                    tracing::error!(
+                        "Potentially dropping queued magnet updates. Consider increasing the \
+                         capacity of the broadcast channel. Current capacity: {broadcast_capacity}"
+                    );
                 }
+
+                if tx.send(magnet_update).is_err() {
+                    tracing::warn!("Tried broadcasting magnet update but no receivers present.");
+                }
+            }
+            Ok(None) => {
+                tracing::warn!("Temporarily lost connection to Postgres");
+            }
+            Err(sqlx::Error::PoolClosed) => {
+                return Ok(());
+            }
+            Err(e) => {
+                // TODO handle sqlx::Error::Io(std::io::Error::ErrorKind::ConnectionReset)?
+                token.cancel();
+                tracing::error!("{e}");
+                return Err(FridgeError::Sqlx(e));
             }
         }
     }
