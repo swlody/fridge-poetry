@@ -6,6 +6,7 @@ mod websocket;
 use std::str::FromStr as _;
 
 use anyhow::Result;
+use error::FridgeError;
 use futures_util::StreamExt as _;
 use mimalloc::MiMalloc;
 use secrecy::{ExposeSecret as _, SecretString};
@@ -80,20 +81,18 @@ fn main() -> Result<()> {
         .block_on(run(config))
 }
 
+#[tracing::instrument]
 async fn broadcast_changes(
     tx: tokio::sync::broadcast::Sender<PgMagnetUpdate>,
     token: CancellationToken,
     mut pg_change_listener: PgListener,
     broadcast_capacity: usize,
-) {
+) -> Result<(), FridgeError> {
     loop {
         select! {
-            () = token.cancelled() => {
-                break;
-            },
-            res = pg_change_listener.recv() => {
+            res = pg_change_listener.try_recv() => {
                 match res {
-                    Ok(msg) => {
+                    Ok(Some(msg)) => {
                         let magnet_update = serde_json::from_str(msg.payload()).expect("Received invalid JSON from postgres");
                         if tx.len() >= broadcast_capacity {
                             tracing::error!(
@@ -107,8 +106,17 @@ async fn broadcast_changes(
                             tracing::warn!("Tried broadcasting magnet update but no receivers present.");
                         }
                     }
+                    Ok(None) => {
+                        tracing::warn!("Temporarily lost connection to Postgres");
+                    }
+                    Err(sqlx::Error::PoolClosed) => {
+                        return Ok(());
+                    }
                     Err(e) => {
-                        tracing::error!("Error from listener: {e}");
+                        // TODO handle sqlx::Error::Io(std::io::Error::ErrorKind::ConnectionReset)?
+                        token.cancel();
+                        tracing::error!("{e}");
+                        return Err(FridgeError::Sqlx(e));
                     }
                 }
             }
@@ -117,8 +125,9 @@ async fn broadcast_changes(
 }
 
 async fn run(config: Config) -> Result<()> {
+    // TODO tune max_connections
     let pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(5)
+        .max_connections(10)
         .connect(config.database_url.expose_secret())
         .await?;
 
@@ -162,19 +171,27 @@ async fn run(config: Config) -> Result<()> {
                     }
                 }
             }
+            () = token.cancelled() => {
+                tracing::info!("Token cancelled");
+                break;
+            }
             () = shutdown_signal() => {
                 tracing::info!("Received shutdown signal");
+                token.cancel();
                 break;
             }
         }
     }
 
-    token.cancel();
-    tracing::info!("Waiting for broadcast changes task");
     tracker.close();
     tracing::info!("Waiting for websocket connections to close");
     tracker.wait().await;
-    broadcast_changes_task.await?;
+
+    tracing::info!("Closing Postgres connection pool");
+    app_state.postgres.close().await;
+
+    tracing::info!("Waiting for broadcast changes task");
+    broadcast_changes_task.await??;
 
     Ok(())
 }

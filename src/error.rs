@@ -12,19 +12,19 @@ pub enum FridgeError {
     #[error("Request exceeds rate limits")]
     RateLimited,
 
-    #[error("WebSocket connection closed by client: {0:?}")]
+    #[error("WebSocket connection closed by client")]
     ClientClose(Option<tungstenite::protocol::frame::CloseFrame>),
 
     #[error("Closing connection due to idle timeout")]
     IdleTimeout,
 
-    #[error("Received an unsupported message type: {0}")]
-    UnsupportedMessage(String),
+    #[error("Received an unsupported message type")]
+    UnsupportedMessage(tungstenite::Message),
 
     #[error(transparent)]
     InvalidMessage(#[from] rmp_serde::decode::Error),
 
-    #[error("Out of bounds update: {0}")]
+    #[error("Out of bounds update")]
     OutOfBounds(String),
 
     #[error(transparent)]
@@ -33,7 +33,7 @@ pub enum FridgeError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
 
-    #[error("Internal server error: {0}")]
+    #[error("Internal server error")]
     Other(#[from] anyhow::Error),
 }
 
@@ -78,10 +78,7 @@ impl FridgeError {
                 code: CloseCode::Error,
                 reason: Utf8Bytes::from_static(""),
             }),
-            FridgeError::ClientClose(_) => {
-                // TODO need to indicate a closure!!
-                None
-            }
+            FridgeError::ClientClose(_) => None,
             FridgeError::RateLimited => None,
         }
     }
