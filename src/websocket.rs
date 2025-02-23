@@ -305,13 +305,19 @@ async fn get_next_action(
         // Update to a magnet entity from Postgres
         magnet_update = session_state.rx.recv() => {
             let magnet_update = magnet_update.map_err(anyhow::Error::from)?;
-            send_relevant_update(&mut session_state.writer, &session_state.client_window, magnet_update).await?;
+            send_relevant_update(
+                &mut session_state.writer,
+                &session_state.client_window,
+                magnet_update,
+            )
+            .await?;
         }
 
         message = session_state.reader.next() => {
-
             let now = Instant::now();
-            if let Some(timestamp) = session_state.last_n_requests[session_state.current_request_index] {
+            if let Some(timestamp) =
+                session_state.last_n_requests[session_state.current_request_index]
+            {
                 if (now - timestamp).as_millis() >= 1000 {
                     session_state.last_n_requests[session_state.current_request_index] = Some(now);
                 } else {
