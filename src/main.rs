@@ -121,9 +121,10 @@ async fn broadcast_changes(
 }
 
 async fn run(config: Config) -> Result<()> {
-    // TODO tune max_connections
+    // pool size ideally ~ thread_count * 2
+    // https://github.com/brettwooldridge/HikariCP/wiki/About-Pool-Sizing
     let pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(10)
+        .max_connections(5)
         .connect(config.database_url.expose_secret())
         .await?;
 
