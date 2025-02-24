@@ -7,7 +7,6 @@ use std::str::FromStr as _;
 
 use anyhow::Result;
 use error::FridgeError;
-use futures_util::StreamExt as _;
 use mimalloc::MiMalloc;
 use secrecy::{ExposeSecret as _, SecretString};
 use serde::Deserialize;
@@ -122,8 +121,9 @@ async fn broadcast_changes(
 }
 
 async fn run(config: Config) -> Result<()> {
-    // pool size ideally ~ thread_count * 2
+    // TODO pool size ideally ~ core_count * 2 (of postgres server?)
     // https://github.com/brettwooldridge/HikariCP/wiki/About-Pool-Sizing
+    // TODO lower acquire timeout?
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(5)
         .connect(config.database_url.expose_secret())
@@ -194,21 +194,19 @@ async fn run(config: Config) -> Result<()> {
     Ok(())
 }
 
-// TODO tokio-websockets scales better with many connections
-// https://github.com/Gelbpunkt/tokio-websockets
 async fn accept_connection(stream: TcpStream, state: AppState) {
     let peer_addr = stream
         .peer_addr()
         .map(|a| a.to_string())
         .unwrap_or_default();
-    match tokio_tungstenite::accept_async(stream).await {
-        Ok(ws_stream) => {
+
+    match tokio_websockets::ServerBuilder::new().accept(stream).await {
+        Ok((_request, ws_stream)) => {
             let session_id = Uuid::now_v7();
             tracing::debug!(
                 "Creating new session with session_id: {session_id} for peer: {peer_addr}",
             );
-            let (writer, reader) = ws_stream.split();
-            websocket::handle_socket(reader, writer, session_id, state).await;
+            websocket::handle_socket(ws_stream, session_id, state).await;
         }
         Err(e) => {
             tracing::warn!("Unable to open websocket connection: {e}");
