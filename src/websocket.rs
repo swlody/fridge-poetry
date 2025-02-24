@@ -333,7 +333,7 @@ async fn get_next_action(
 
             match message {
                 Some(Ok(Message::Binary(bytes))) => {
-                    // rate limiting - if the nth to last request was less than a second ago, ignore the new one.
+                    // rate limiting - if the nth to last request was less than a second ago, ignore this
                     session_state.time_since_last_comms = now;
                     handle_websocket_binary(
                         bytes,
@@ -344,14 +344,20 @@ async fn get_next_action(
                     )
                     .await?;
                 }
-                Some(Ok(Message::Pong(_))) => {
+                Some(Ok(Message::Pong(payload))) => {
+                    if !payload.is_empty() {
+                        tracing::warn!("Received weird pong: {payload:?}");
+                    }
                     return Ok(());
                 }
                 Some(Ok(Message::Close(close))) => {
                     return Err(FridgeError::ClientClose(close));
                 }
+                Some(Ok(Message::Ping(payload))) => {
+                    session_state.writer.send(Message::Pong(payload)).await?;
+                }
                 Some(Ok(thing)) => {
-                    // Ping or Text
+                    // Text
                     return Err(FridgeError::UnsupportedMessage(thing));
                 }
                 Some(Err(e)) => {
