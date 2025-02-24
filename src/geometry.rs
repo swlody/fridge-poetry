@@ -42,20 +42,50 @@ impl Window {
     }
 
     #[tracing::instrument]
-    pub fn clamp(&self) -> Window {
+    pub fn clamp(self) -> Window {
+        const MAX_WIDTH: i32 = 23040;
+        const MAX_HEIGHT: i32 = 12960;
+
         let width = self.x2 - self.x1;
         let height = self.y2 - self.y1;
 
-        let (x1, x2) = if width > 23040 {
-            let width_diff = width - 23040;
+        let (x1, x2) = if width > MAX_WIDTH {
+            let width_diff = width - MAX_WIDTH;
+
+            let new_x1 = self.x1 - width_diff / 2;
+            let new_x2 = self.x2 + width_diff / 2;
+
+            tracing::trace!(
+                "Clamping width to valid window size: {} -> {}... ({},{}) -> ({}, {})",
+                width,
+                MAX_WIDTH,
+                self.x1,
+                self.x2,
+                new_x1,
+                new_x2
+            );
+
             (self.x1 - width_diff / 2, self.x2 + width_diff / 2)
         } else {
             (self.x1, self.x2)
         };
 
-        let (y1, y2) = if height > 12960 {
-            let height_diff = height - 12960;
-            (self.y1 - height_diff / 2, self.y2 + height_diff / 2)
+        let (y1, y2) = if height > MAX_HEIGHT {
+            let height_diff = height - MAX_HEIGHT;
+            let new_y1 = self.y1 - height_diff / 2;
+            let new_y2 = self.y2 + height_diff / 2;
+
+            tracing::trace!(
+                "Clamping height to valid window size: {} -> {}... ({},{}) -> ({}, {})",
+                height,
+                MAX_HEIGHT,
+                self.y1,
+                self.y2,
+                new_y1,
+                new_y2
+            );
+
+            (new_y1, new_y2)
         } else {
             (self.y1, self.y2)
         };
