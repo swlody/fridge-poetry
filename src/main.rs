@@ -100,6 +100,7 @@ async fn broadcast_changes(
                     );
                 }
 
+                tracing::trace!("Propagating magnet update to websocket tasks: {magnet_update:#?}");
                 if tx.send(magnet_update).is_err() {
                     tracing::warn!("Tried broadcasting magnet update but no receivers present.");
                 }

@@ -64,20 +64,32 @@ struct ClientMagnetUpdate {
 impl ClientMagnetUpdate {
     fn is_valid(&self, window: &Window) -> bool {
         if self.id > 20_000_100 {
+            tracing::trace!("Invalid id: {}", self.id);
             return false;
         }
 
         if !(-360..=360).contains(&self.rotation) {
+            tracing::trace!("Invalid rotation: {}", self.rotation);
             return false;
         }
 
         if !(window.x1 - 100..=window.x2 + 100).contains(&self.x)
             || !(window.y1 - 100..=window.y2 + 100).contains(&self.y)
         {
+            tracing::trace!(
+                "Invalid location outside window bounds: ({}, {})",
+                self.x,
+                self.y
+            );
             return false;
         }
 
         if !(-500_000..=500_000).contains(&self.x) || !(-500_000..=500_000).contains(&self.y) {
+            tracing::trace!(
+                "Invalid update outside world bounds: ({}, {})",
+                self.x,
+                self.y
+            );
             return false;
         }
 
@@ -101,6 +113,7 @@ async fn send_relevant_update(
 ) -> Result<bool, tungstenite::Error> {
     if client_window.contains(magnet_update.new_x, magnet_update.new_y) {
         if client_window.contains(magnet_update.old_x, magnet_update.old_y) {
+            tracing::trace!("Magnet moved within window bounds, sending move update");
             let location_update = MagnetUpdate::Move(LocationUpdate {
                 id: magnet_update.id,
                 x: magnet_update.new_x,
@@ -112,6 +125,7 @@ async fn send_relevant_update(
             let buf = rmp_serde::to_vec(&location_update).unwrap();
             writer.send(buf.into()).await?;
         } else {
+            tracing::trace!("Magnet moved into window bounds, sending creation update");
             let create_update = MagnetUpdate::Create(Magnet {
                 id: magnet_update.id,
                 x: magnet_update.new_x,
@@ -126,6 +140,7 @@ async fn send_relevant_update(
         }
         Ok(true)
     } else if client_window.contains(magnet_update.old_x, magnet_update.old_y) {
+        tracing::trace!("Magnet moved outside of window bounds, sending removal update");
         let remove_update = MagnetUpdate::Remove(magnet_update.id);
 
         let buf = rmp_serde::to_vec(&remove_update).unwrap();
@@ -234,6 +249,7 @@ async fn handle_websocket_binary(
 
             let Some(difference) = difference else {
                 // ignoring window non-change
+                tracing::trace!("Window did not actually change since last update, ignoring");
                 return Ok(());
             };
 
@@ -318,7 +334,7 @@ async fn get_next_action(
             if let Some(timestamp) =
                 session_state.last_n_requests[session_state.current_request_index]
             {
-                if (now - timestamp).as_millis() >= 1000 {
+                if (now - timestamp) >= Duration::from_millis(1000) {
                     session_state.last_n_requests[session_state.current_request_index] = Some(now);
                 } else {
                     return Err(FridgeError::RateLimited);
@@ -354,6 +370,7 @@ async fn get_next_action(
                     return Err(FridgeError::ClientClose(close));
                 }
                 Some(Ok(Message::Ping(payload))) => {
+                    tracing::trace!("Replying to ping");
                     session_state.writer.send(Message::Pong(payload)).await?;
                 }
                 Some(Ok(thing)) => {
@@ -383,6 +400,7 @@ pub async fn handle_socket(
         scope.set_tag("session_id", session_id);
     });
     let session_span = tracing::span!(Level::DEBUG, "session", id = session_id.to_string());
+    let _enter = session_span.enter();
 
     {
         let session_id_update = MagnetUpdate::SessionIdUpdate(session_id.to_string());
@@ -425,12 +443,14 @@ pub async fn handle_socket(
             }
             Err(_) => {
                 if (Instant::now() - session_state.time_since_last_comms) > MAX_IDLE_TIME {
+                    tracing::trace!("Exceeded max idle time");
                     close_with(&mut session_state.writer, FridgeError::IdleTimeout)
                         .instrument(session_span.clone())
                         .await;
                     break;
                 }
 
+                tracing::trace!("Sending heartbeat");
                 if let Err(e) = session_state
                     .writer
                     .send(tungstenite::Message::Ping(tungstenite::Bytes::new()))
