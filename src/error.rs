@@ -1,8 +1,5 @@
 use thiserror::Error;
-use tokio_tungstenite::tungstenite::{
-    self, Utf8Bytes,
-    protocol::{CloseFrame, frame::coding::CloseCode},
-};
+use tokio_websockets::{CloseCode, Message};
 
 #[derive(Debug, Error)]
 pub enum FridgeError {
@@ -13,13 +10,13 @@ pub enum FridgeError {
     RateLimited,
 
     #[error("WebSocket connection closed by client")]
-    ClientClose(Option<tungstenite::protocol::frame::CloseFrame>),
+    ClientClose(Option<(CloseCode, String)>),
 
     #[error("Closing connection due to idle timeout")]
     IdleTimeout,
 
     #[error("Received an unsupported message type")]
-    UnsupportedMessage(tungstenite::Message),
+    UnsupportedMessage(tokio_websockets::Message),
 
     #[error(transparent)]
     InvalidMessage(#[from] rmp_serde::decode::Error),
@@ -28,7 +25,7 @@ pub enum FridgeError {
     OutOfBounds(String),
 
     #[error(transparent)]
-    Tungstenite(#[from] tungstenite::Error),
+    Tungstenite(#[from] tokio_websockets::Error),
 
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
@@ -38,46 +35,32 @@ pub enum FridgeError {
 }
 
 impl FridgeError {
-    pub fn to_close_frame(&self) -> Option<CloseFrame> {
+    pub fn to_close_message(&self) -> Option<Message> {
         match self {
-            FridgeError::Shutdown => Some(CloseFrame {
-                code: CloseCode::Restart,
-                reason: Utf8Bytes::from_static(""),
-            }),
-            FridgeError::IdleTimeout => Some(CloseFrame {
-                code: CloseCode::Away,
-                reason: Utf8Bytes::from_static(""),
-            }),
-            FridgeError::InvalidMessage(_) => Some(CloseFrame {
-                code: CloseCode::Invalid,
-                reason: Utf8Bytes::from_static(""),
-            }),
-            FridgeError::UnsupportedMessage(_) => Some(CloseFrame {
-                code: CloseCode::Unsupported,
-                reason: Utf8Bytes::from_static(""),
-            }),
-            FridgeError::Tungstenite(tungstenite::error::Error::Capacity(_)) => Some(CloseFrame {
-                code: CloseCode::Size,
-                reason: Utf8Bytes::from_static(""),
-            }),
+            FridgeError::Shutdown => Some(Message::close(Some(CloseCode::SERVICE_RESTART), "")),
+            FridgeError::IdleTimeout => Some(Message::close(Some(CloseCode::GOING_AWAY), "")),
+            FridgeError::InvalidMessage(_) => Some(Message::close(
+                Some(CloseCode::INVALID_FRAME_PAYLOAD_DATA),
+                "",
+            )),
+            FridgeError::UnsupportedMessage(_) => {
+                Some(Message::close(Some(CloseCode::UNSUPPORTED_DATA), ""))
+            }
+            FridgeError::Tungstenite(tokio_websockets::Error::PayloadTooLong { .. }) => {
+                Some(Message::close(Some(CloseCode::MESSAGE_TOO_BIG), ""))
+            }
             FridgeError::Tungstenite(_) => {
                 // We experienced an error in sending a previous message,
                 // don't expect this one to complete
-                Some(CloseFrame {
-                    code: CloseCode::Abnormal,
-                    reason: Utf8Bytes::from_static(""),
-                })
+                // note: 1006 = Abnormal Closure
+                Some(Message::close(Some(CloseCode::try_from(1006).unwrap()), ""))
             }
             FridgeError::Sqlx(sqlx::Error::RowNotFound) | FridgeError::OutOfBounds(_) => {
-                Some(CloseFrame {
-                    code: CloseCode::Policy,
-                    reason: Utf8Bytes::from_static(""),
-                })
+                Some(Message::close(Some(CloseCode::POLICY_VIOLATION), ""))
             }
-            FridgeError::Other(_) | FridgeError::Sqlx(_) => Some(CloseFrame {
-                code: CloseCode::Error,
-                reason: Utf8Bytes::from_static(""),
-            }),
+            FridgeError::Other(_) | FridgeError::Sqlx(_) => {
+                Some(Message::close(Some(CloseCode::INTERNAL_SERVER_ERROR), ""))
+            }
             FridgeError::ClientClose(_) => None,
             FridgeError::RateLimited => None,
         }

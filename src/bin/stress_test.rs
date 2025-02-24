@@ -1,7 +1,6 @@
 use futures_util::{SinkExt as _, StreamExt as _};
 use rand::{Rng as _, SeedableRng, seq::IndexedRandom as _};
 use serde::{Deserialize, Serialize};
-use tokio_tungstenite::tungstenite;
 
 #[derive(Clone, Debug, Serialize)]
 struct Window {
@@ -42,12 +41,13 @@ async fn main() {
     for _ in 0..1_000 {
         tokio::spawn(async {
             let mut rng = rand::rngs::SmallRng::from_os_rng();
-            let (socket, response) = tokio_tungstenite::connect_async("ws://localhost:8080/ws")
-                .await
-                .unwrap();
-            assert!(response.status() == tungstenite::http::StatusCode::SWITCHING_PROTOCOLS);
-
-            let (mut writer, mut reader) = socket.split();
+            let (mut client, response) = tokio_websockets::ClientBuilder::from_uri(
+                "ws://localhost:8080/ws".try_into().unwrap(),
+            )
+            .connect()
+            .await
+            .unwrap();
+            assert!(response.status() == http::StatusCode::SWITCHING_PROTOCOLS);
 
             let mut window = true;
 
@@ -75,9 +75,9 @@ async fn main() {
                         x2: x_center + 1000,
                         y2: y_center + 1000,
                     });
-                    writer
-                        .send(tokio_tungstenite::tungstenite::Message::Binary(
-                            rmp_serde::to_vec(&update_message).unwrap().into(),
+                    client
+                        .send(tokio_websockets::Message::binary(
+                            rmp_serde::to_vec(&update_message).unwrap(),
                         ))
                         .await
                         .unwrap();
@@ -97,9 +97,9 @@ async fn main() {
                             y,
                             rotation,
                         });
-                        writer
-                            .send(tungstenite::Message::Binary(
-                                rmp_serde::to_vec(&update_message).unwrap().into(),
+                        client
+                            .send(tokio_websockets::Message::binary(
+                                rmp_serde::to_vec(&update_message).unwrap(),
                             ))
                             .await
                             .unwrap();
@@ -109,8 +109,10 @@ async fn main() {
                 tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                 window = !window;
 
-                if let Some(Ok(tungstenite::Message::Binary(bytes))) = reader.next().await {
-                    let client_update = rmp_serde::from_slice::<Vec<Magnet>>(&bytes);
+                if let Some(Ok(message)) = client.next().await {
+                    assert!(message.is_binary());
+                    let client_update =
+                        rmp_serde::from_slice::<Vec<Magnet>>(&message.into_payload());
                     if let Ok(magnets) = client_update {
                         magnetsi = magnets;
                     }

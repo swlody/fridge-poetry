@@ -1,16 +1,10 @@
 use std::time::{Duration, Instant};
 
-use futures_util::{
-    SinkExt as _, StreamExt,
-    stream::{SplitSink, SplitStream},
-};
+use futures_util::{SinkExt as _, StreamExt};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use tokio::{net::TcpStream, select, time::timeout};
-use tokio_tungstenite::{
-    WebSocketStream,
-    tungstenite::{self, Message},
-};
+use tokio_websockets::{Message, WebSocketStream};
 use tracing::{Instrument, Level};
 use uuid::Uuid;
 
@@ -20,8 +14,7 @@ use crate::{
     state::{AppState, PgMagnetUpdate},
 };
 
-type WsStream = SplitStream<WebSocketStream<TcpStream>>;
-type WsSink = SplitSink<WebSocketStream<TcpStream>, tungstenite::Message>;
+type WsStream = WebSocketStream<TcpStream>;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Magnet {
@@ -105,12 +98,12 @@ enum ClientUpdate {
 }
 
 // TODO attach timestamp?
-#[tracing::instrument(skip(writer))]
+#[tracing::instrument(skip(ws_stream))]
 async fn send_relevant_update(
-    writer: &mut WsSink,
+    ws_stream: &mut WsStream,
     client_window: &Window,
     magnet_update: PgMagnetUpdate,
-) -> Result<bool, tungstenite::Error> {
+) -> Result<bool, tokio_websockets::Error> {
     if client_window.contains(magnet_update.new_x, magnet_update.new_y) {
         if client_window.contains(magnet_update.old_x, magnet_update.old_y) {
             tracing::trace!("Magnet moved within window bounds, sending move update");
@@ -123,7 +116,7 @@ async fn send_relevant_update(
             });
 
             let buf = rmp_serde::to_vec(&location_update).unwrap();
-            writer.send(buf.into()).await?;
+            ws_stream.send(Message::binary(buf)).await?;
         } else {
             tracing::trace!("Magnet moved into window bounds, sending creation update");
             let create_update = MagnetUpdate::Create(Magnet {
@@ -136,7 +129,7 @@ async fn send_relevant_update(
             });
 
             let buf = rmp_serde::to_vec(&create_update).unwrap();
-            writer.send(buf.into()).await?;
+            ws_stream.send(Message::binary(buf)).await?;
         }
         Ok(true)
     } else if client_window.contains(magnet_update.old_x, magnet_update.old_y) {
@@ -144,16 +137,16 @@ async fn send_relevant_update(
         let remove_update = MagnetUpdate::Remove(magnet_update.id);
 
         let buf = rmp_serde::to_vec(&remove_update).unwrap();
-        writer.send(buf.into()).await?;
+        ws_stream.send(Message::binary(buf)).await?;
         Ok(true)
     } else {
         Ok(false)
     }
 }
 
-#[tracing::instrument(skip(writer, postgres))]
+#[tracing::instrument(skip(ws_stream, postgres))]
 async fn send_new_magnets(
-    writer: &mut WsSink,
+    ws_stream: &mut WsStream,
     shape: &Shape,
     postgres: &PgPool,
 ) -> Result<(), FridgeError> {
@@ -202,7 +195,7 @@ async fn send_new_magnets(
     };
 
     let buf = rmp_serde::to_vec(&MagnetUpdate::CanvasUpdate(magnets)).unwrap();
-    writer.send(buf.into()).await?;
+    ws_stream.send(Message::binary(buf)).await?;
     Ok(())
 }
 
@@ -228,15 +221,15 @@ async fn update_magnet(
     Ok(())
 }
 
-#[tracing::instrument(skip(writer, session_id))]
+#[tracing::instrument(skip(ws_stream, session_id))]
 async fn handle_websocket_binary(
-    bytes: tungstenite::Bytes,
+    payload: tokio_websockets::Payload,
     client_window: &mut Window,
-    writer: &mut WsSink,
+    ws_stream: &mut WsStream,
     state: &AppState,
     session_id: &Uuid,
 ) -> Result<(), FridgeError> {
-    let client_update = rmp_serde::from_slice(&bytes)?;
+    let client_update = rmp_serde::from_slice(&payload)?;
 
     match client_update {
         ClientUpdate::Window(window_update) => {
@@ -253,7 +246,7 @@ async fn handle_websocket_binary(
                 return Ok(());
             };
 
-            send_new_magnets(writer, &difference, &state.postgres).await?;
+            send_new_magnets(ws_stream, &difference, &state.postgres).await?;
         }
         ClientUpdate::Magnet(magnet_update) => {
             if !magnet_update.is_valid(client_window) {
@@ -267,8 +260,8 @@ async fn handle_websocket_binary(
     Ok(())
 }
 
-#[tracing::instrument(skip(writer))]
-async fn close_with(writer: &mut WsSink, error: FridgeError) -> bool {
+#[tracing::instrument(skip(ws_stream))]
+async fn close_with(ws_stream: &mut WsStream, error: FridgeError) -> bool {
     match &error {
         e @ FridgeError::ClientClose(_) => {
             tracing::debug!("{e}");
@@ -280,9 +273,9 @@ async fn close_with(writer: &mut WsSink, error: FridgeError) -> bool {
         _ => {}
     }
 
-    if let Some(close_frame) = error.to_close_frame() {
-        tracing::debug!("Closing connection with {close_frame:?}");
-        let _ = writer.send(Message::Close(Some(close_frame))).await;
+    if let Some(close_message) = error.to_close_message() {
+        tracing::debug!("Closing connection with {close_message:?}");
+        let _ = ws_stream.send(close_message).await;
         return true;
     }
 
@@ -296,8 +289,7 @@ const REQUESTS_PER_SECOND: usize = 5;
 struct SessionState {
     session_id: Uuid,
 
-    reader: WsStream,
-    writer: WsSink,
+    ws_stream: WsStream,
 
     rx: tokio::sync::broadcast::Receiver<PgMagnetUpdate>,
 
@@ -322,14 +314,14 @@ async fn get_next_action(
         magnet_update = session_state.rx.recv() => {
             let magnet_update = magnet_update.map_err(anyhow::Error::from)?;
             send_relevant_update(
-                &mut session_state.writer,
+                &mut session_state.ws_stream,
                 &session_state.client_window,
                 magnet_update,
             )
             .await?;
         }
 
-        message = session_state.reader.next() => {
+        message = session_state.ws_stream.next() => {
             let now = Instant::now();
             if let Some(timestamp) =
                 session_state.last_n_requests[session_state.current_request_index]
@@ -348,34 +340,39 @@ async fn get_next_action(
             }
 
             match message {
-                Some(Ok(Message::Binary(bytes))) => {
-                    // rate limiting - if the nth to last request was less than a second ago, ignore this
+                Some(Ok(message)) if message.is_binary() => {
                     session_state.time_since_last_comms = now;
                     handle_websocket_binary(
-                        bytes,
+                        message.into_payload(),
                         &mut session_state.client_window,
-                        &mut session_state.writer,
+                        &mut session_state.ws_stream,
                         state,
                         &session_state.session_id,
                     )
                     .await?;
                 }
-                Some(Ok(Message::Pong(payload))) => {
+                Some(Ok(message)) if message.is_pong() => {
+                    let payload = message.into_payload();
                     if !payload.is_empty() {
                         tracing::warn!("Received weird pong: {payload:?}");
                     }
                     return Ok(());
                 }
-                Some(Ok(Message::Close(close))) => {
-                    return Err(FridgeError::ClientClose(close));
+                Some(Ok(message)) if message.is_close() => {
+                    return Err(FridgeError::ClientClose(
+                        message.as_close().map(|c| (c.0, c.1.to_string())),
+                    ));
                 }
-                Some(Ok(Message::Ping(payload))) => {
+                Some(Ok(message)) if message.is_ping() => {
                     tracing::trace!("Replying to ping");
-                    session_state.writer.send(Message::Pong(payload)).await?;
+                    session_state
+                        .ws_stream
+                        .send(Message::pong(message.into_payload()))
+                        .await?;
                 }
-                Some(Ok(thing)) => {
+                Some(Ok(message)) => {
                     // Text
-                    return Err(FridgeError::UnsupportedMessage(thing));
+                    return Err(FridgeError::UnsupportedMessage(message));
                 }
                 Some(Err(e)) => {
                     return Err(FridgeError::Tungstenite(e));
@@ -390,12 +387,7 @@ async fn get_next_action(
     Ok(())
 }
 
-pub async fn handle_socket(
-    reader: WsStream,
-    mut writer: WsSink,
-    session_id: Uuid,
-    app_state: AppState,
-) {
+pub async fn handle_socket(mut ws_stream: WsStream, session_id: Uuid, app_state: AppState) {
     sentry::configure_scope(|scope| {
         scope.set_tag("session_id", session_id);
     });
@@ -405,7 +397,7 @@ pub async fn handle_socket(
     {
         let session_id_update = MagnetUpdate::SessionIdUpdate(session_id.to_string());
         let buf = rmp_serde::to_vec(&session_id_update).unwrap();
-        if writer.send(buf.into()).await.is_err() {
+        if ws_stream.send(Message::binary(buf)).await.is_err() {
             tracing::debug!(parent: &session_span, "Unable to establish connnection");
             return;
         }
@@ -413,8 +405,7 @@ pub async fn handle_socket(
 
     let mut session_state = SessionState {
         session_id,
-        reader,
-        writer,
+        ws_stream,
         rx: app_state.magnet_updates.subscribe(),
         client_window: Window::default(),
         last_n_requests: [None; REQUESTS_PER_SECOND],
@@ -434,7 +425,7 @@ pub async fn handle_socket(
         {
             Ok(Ok(())) => {}
             Ok(Err(e)) => {
-                if close_with(&mut session_state.writer, e)
+                if close_with(&mut session_state.ws_stream, e)
                     .instrument(session_span.clone())
                     .await
                 {
@@ -444,19 +435,15 @@ pub async fn handle_socket(
             Err(_) => {
                 if (Instant::now() - session_state.time_since_last_comms) > MAX_IDLE_TIME {
                     tracing::trace!("Exceeded max idle time");
-                    close_with(&mut session_state.writer, FridgeError::IdleTimeout)
+                    close_with(&mut session_state.ws_stream, FridgeError::IdleTimeout)
                         .instrument(session_span.clone())
                         .await;
                     break;
                 }
 
                 tracing::trace!("Sending heartbeat");
-                if let Err(e) = session_state
-                    .writer
-                    .send(tungstenite::Message::Ping(tungstenite::Bytes::new()))
-                    .await
-                {
-                    close_with(&mut session_state.writer, FridgeError::Tungstenite(e))
+                if let Err(e) = session_state.ws_stream.send(Message::ping("")).await {
+                    close_with(&mut session_state.ws_stream, FridgeError::Tungstenite(e))
                         .instrument(session_span.clone())
                         .await;
                     break;
