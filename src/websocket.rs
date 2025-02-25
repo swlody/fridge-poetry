@@ -392,7 +392,6 @@ pub async fn handle_socket(mut ws_stream: WsStream, session_id: Uuid, app_state:
         scope.set_tag("session_id", session_id);
     });
     let session_span = tracing::span!(Level::DEBUG, "session", id = session_id.to_string());
-    let _enter = session_span.enter();
 
     {
         let session_id_update = MagnetUpdate::SessionIdUpdate(session_id.to_string());
