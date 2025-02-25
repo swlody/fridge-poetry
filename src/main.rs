@@ -50,6 +50,8 @@ fn main() -> Result<()> {
 
     tracing_subscriber::fmt()
         .with_target(true)
+        .with_file(true)
+        .with_line_number(true)
         .with_max_level(config.log_level.as_ref().map_or(Level::DEBUG, |s| {
             Level::from_str(s).unwrap_or_else(|_| panic!("Invalid value for FRIDGE_LOG_LEVEL: {s}"))
         }))
