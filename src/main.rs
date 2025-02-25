@@ -17,7 +17,7 @@ use tokio::{
     sync::broadcast,
 };
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use tracing::Level;
+use tracing::{Level, level_filters::LevelFilter};
 use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
 use uuid::Uuid;
 
@@ -48,6 +48,11 @@ fn main() -> Result<()> {
 
     let config: Config = envy::from_env()?;
 
+    let filter = tracing_subscriber::filter::Targets::default()
+        .with_target("reqwest", LevelFilter::OFF)
+        .with_target("hyper_util", LevelFilter::OFF)
+        .with_default(Level::DEBUG);
+
     tracing_subscriber::fmt()
         .with_target(true)
         .with_file(true)
@@ -57,6 +62,7 @@ fn main() -> Result<()> {
         }))
         .finish()
         .with(sentry::integrations::tracing::layer())
+        .with(filter)
         .try_init()?;
 
     let _sentry_guard = if let Some(dsn) = config.sentry_dsn.as_ref() {
@@ -82,7 +88,6 @@ fn main() -> Result<()> {
         .block_on(run(config))
 }
 
-#[tracing::instrument]
 async fn broadcast_changes(
     tx: tokio::sync::broadcast::Sender<PgMagnetUpdate>,
     token: CancellationToken,

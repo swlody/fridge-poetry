@@ -98,12 +98,15 @@ enum ClientUpdate {
 }
 
 // TODO attach timestamp?
-#[tracing::instrument(skip(ws_stream))]
+#[tracing::instrument(skip(ws_stream, session_id))]
 async fn send_relevant_update(
     ws_stream: &mut WsStream,
     client_window: &Window,
     magnet_update: PgMagnetUpdate,
+    session_id: &Uuid,
 ) -> Result<bool, tokio_websockets::Error> {
+    sentry::configure_scope(|scope| scope.set_tag("session_id", session_id));
+
     if client_window.contains(magnet_update.new_x, magnet_update.new_y) {
         if client_window.contains(magnet_update.old_x, magnet_update.old_y) {
             tracing::trace!("Magnet moved within window bounds, sending move update");
@@ -238,13 +241,14 @@ async fn handle_websocket_binary(
             }
 
             let difference = client_window.difference(&window_update);
-            *client_window = window_update.clamp();
 
             let Some(difference) = difference else {
                 // ignoring window non-change
                 tracing::trace!("Window did not actually change since last update, ignoring");
                 return Ok(());
             };
+
+            *client_window = window_update.clamp();
 
             send_new_magnets(ws_stream, &difference, &state.postgres).await?;
         }
@@ -260,8 +264,10 @@ async fn handle_websocket_binary(
     Ok(())
 }
 
-#[tracing::instrument(skip(ws_stream))]
-async fn close_with(ws_stream: &mut WsStream, error: FridgeError) -> bool {
+#[tracing::instrument(skip(ws_stream, session_id))]
+async fn close_with(ws_stream: &mut WsStream, error: FridgeError, session_id: &Uuid) -> bool {
+    sentry::configure_scope(|scope| scope.set_tag("session_id", session_id));
+
     match &error {
         e @ FridgeError::ClientClose(_) => {
             tracing::debug!("{e}");
@@ -288,6 +294,7 @@ const REQUESTS_PER_SECOND: usize = 5;
 #[derive(Debug)]
 struct SessionState {
     session_id: Uuid,
+    span: tracing::Span,
 
     ws_stream: WsStream,
 
@@ -300,13 +307,83 @@ struct SessionState {
     time_since_last_comms: Instant,
 }
 
-#[tracing::instrument(skip(session_state))]
-async fn get_next_action(
-    state: &AppState,
+#[tracing::instrument(skip(message, session_state))]
+async fn handle_websocket_message(
+    message: Option<Result<Message, tokio_websockets::Error>>,
+    app_state: &AppState,
     session_state: &mut SessionState,
 ) -> Result<(), FridgeError> {
+    sentry::configure_scope(|scope| scope.set_tag("session_id", session_state.session_id));
+
+    let now = Instant::now();
+    if let Some(timestamp) = session_state.last_n_requests[session_state.current_request_index] {
+        if (now - timestamp) >= Duration::from_millis(1000) {
+            session_state.last_n_requests[session_state.current_request_index] = Some(now);
+        } else {
+            return Err(FridgeError::RateLimited);
+        }
+    } else {
+        session_state.last_n_requests[session_state.current_request_index] = Some(now);
+    }
+    session_state.current_request_index += 1;
+    if session_state.current_request_index > REQUESTS_PER_SECOND - 1 {
+        session_state.current_request_index = 0;
+    }
+
+    match message {
+        Some(Ok(message)) if message.is_binary() => {
+            session_state.time_since_last_comms = now;
+            handle_websocket_binary(
+                message.into_payload(),
+                &mut session_state.client_window,
+                &mut session_state.ws_stream,
+                app_state,
+                &session_state.session_id,
+            )
+            .await?;
+        }
+        Some(Ok(message)) if message.is_pong() => {
+            let payload = message.into_payload();
+            if !payload.is_empty() {
+                tracing::warn!("Received weird pong: {payload:?}");
+            }
+            return Ok(());
+        }
+        Some(Ok(message)) if message.is_close() => {
+            return Err(FridgeError::ClientClose(
+                message.as_close().map(|c| (c.0, c.1.to_string())),
+            ));
+        }
+        Some(Ok(message)) if message.is_ping() => {
+            tracing::trace!("Replying to ping");
+            session_state
+                .ws_stream
+                .send(Message::pong(message.into_payload()))
+                .await?;
+        }
+        Some(Ok(message)) => {
+            // Text
+            return Err(FridgeError::UnsupportedMessage(message));
+        }
+        Some(Err(e)) => {
+            return Err(FridgeError::Tungstenite(e));
+        }
+        None => {
+            return Err(FridgeError::ClientClose(None));
+        }
+    }
+
+    Ok(())
+}
+
+async fn get_next_action(
+    app_state: &AppState,
+    session_state: &mut SessionState,
+) -> Result<(), FridgeError> {
+    let session_span = session_state.span.clone();
+
     select! {
-        () = state.token.cancelled() => {
+        () = app_state.token.cancelled() => {
             return Err(FridgeError::Shutdown);
         }
 
@@ -317,70 +394,14 @@ async fn get_next_action(
                 &mut session_state.ws_stream,
                 &session_state.client_window,
                 magnet_update,
+                &session_state.session_id
             )
+            .instrument(session_span)
             .await?;
         }
 
         message = session_state.ws_stream.next() => {
-            let now = Instant::now();
-            if let Some(timestamp) =
-                session_state.last_n_requests[session_state.current_request_index]
-            {
-                if (now - timestamp) >= Duration::from_millis(1000) {
-                    session_state.last_n_requests[session_state.current_request_index] = Some(now);
-                } else {
-                    return Err(FridgeError::RateLimited);
-                }
-            } else {
-                session_state.last_n_requests[session_state.current_request_index] = Some(now);
-            }
-            session_state.current_request_index += 1;
-            if session_state.current_request_index > REQUESTS_PER_SECOND - 1 {
-                session_state.current_request_index = 0;
-            }
-
-            match message {
-                Some(Ok(message)) if message.is_binary() => {
-                    session_state.time_since_last_comms = now;
-                    handle_websocket_binary(
-                        message.into_payload(),
-                        &mut session_state.client_window,
-                        &mut session_state.ws_stream,
-                        state,
-                        &session_state.session_id,
-                    )
-                    .await?;
-                }
-                Some(Ok(message)) if message.is_pong() => {
-                    let payload = message.into_payload();
-                    if !payload.is_empty() {
-                        tracing::warn!("Received weird pong: {payload:?}");
-                    }
-                    return Ok(());
-                }
-                Some(Ok(message)) if message.is_close() => {
-                    return Err(FridgeError::ClientClose(
-                        message.as_close().map(|c| (c.0, c.1.to_string())),
-                    ));
-                }
-                Some(Ok(message)) if message.is_ping() => {
-                    tracing::trace!("Replying to ping");
-                    session_state
-                        .ws_stream
-                        .send(Message::pong(message.into_payload()))
-                        .await?;
-                }
-                Some(Ok(message)) => {
-                    // Text
-                    return Err(FridgeError::UnsupportedMessage(message));
-                }
-                Some(Err(e)) => {
-                    return Err(FridgeError::Tungstenite(e));
-                }
-                None => {
-                    return Err(FridgeError::ClientClose(None));
-                }
-            }
+            handle_websocket_message(message, app_state, session_state).instrument(session_span).await?;
         }
     }
 
@@ -388,9 +409,6 @@ async fn get_next_action(
 }
 
 pub async fn handle_socket(mut ws_stream: WsStream, session_id: Uuid, app_state: AppState) {
-    sentry::configure_scope(|scope| {
-        scope.set_tag("session_id", session_id);
-    });
     let session_span = tracing::span!(Level::DEBUG, "session", id = session_id.to_string());
 
     {
@@ -404,6 +422,7 @@ pub async fn handle_socket(mut ws_stream: WsStream, session_id: Uuid, app_state:
 
     let mut session_state = SessionState {
         session_id,
+        span: session_span,
         ws_stream,
         rx: app_state.magnet_updates.subscribe(),
         client_window: Window::default(),
@@ -416,16 +435,11 @@ pub async fn handle_socket(mut ws_stream: WsStream, session_id: Uuid, app_state:
     const TEN_SECS: Duration = Duration::from_millis(10000);
 
     loop {
-        match timeout(
-            TEN_SECS,
-            get_next_action(&app_state, &mut session_state).instrument(session_span.clone()),
-        )
-        .await
-        {
+        match timeout(TEN_SECS, get_next_action(&app_state, &mut session_state)).await {
             Ok(Ok(())) => {}
             Ok(Err(e)) => {
-                if close_with(&mut session_state.ws_stream, e)
-                    .instrument(session_span.clone())
+                if close_with(&mut session_state.ws_stream, e, &session_state.session_id)
+                    .instrument(session_state.span.clone())
                     .await
                 {
                     break;
@@ -433,18 +447,26 @@ pub async fn handle_socket(mut ws_stream: WsStream, session_id: Uuid, app_state:
             }
             Err(_) => {
                 if (Instant::now() - session_state.time_since_last_comms) > MAX_IDLE_TIME {
-                    tracing::trace!("Exceeded max idle time");
-                    close_with(&mut session_state.ws_stream, FridgeError::IdleTimeout)
-                        .instrument(session_span.clone())
-                        .await;
+                    tracing::trace!(parent: &session_state.span, "Exceeded max idle time");
+                    close_with(
+                        &mut session_state.ws_stream,
+                        FridgeError::IdleTimeout,
+                        &session_state.session_id,
+                    )
+                    .instrument(session_state.span.clone())
+                    .await;
                     break;
                 }
 
-                tracing::trace!("Sending heartbeat");
+                tracing::trace!(parent: &session_state.span, "Sending heartbeat");
                 if let Err(e) = session_state.ws_stream.send(Message::ping("")).await {
-                    close_with(&mut session_state.ws_stream, FridgeError::Tungstenite(e))
-                        .instrument(session_span.clone())
-                        .await;
+                    close_with(
+                        &mut session_state.ws_stream,
+                        FridgeError::Tungstenite(e),
+                        &session_state.session_id,
+                    )
+                    .instrument(session_state.span.clone())
+                    .await;
                     break;
                 }
             }
