@@ -1,78 +1,91 @@
-import { pack, unpack } from "msgpackr";
+import { unpack } from "msgpackr";
 import * as ease from "easing-utils";
 import * as uuidv7 from "jsr:@std/uuid/unstable-v7";
 
+import { App } from "./App.ts";
+import * as AppState from "./AppState.ts";
+import * as Config from "./Config.ts";
 import {
   clickedElement,
   hideRotationDot,
   isDraggingMagnet,
   Magnet,
-} from "./magnet.ts";
+} from "./Magnet.ts";
+import * as Utils from "./Utils.ts";
 
 import "./style.css";
 
-const WS_URL = import.meta.env.VITE_WS_BASE_URL || "ws";
+AppState.webSocket.connect();
+AppState.webSocket.onopen = setupWebSocket;
 
-export let scale = 1.0;
+function setupWebSocket() {
+  AppState.webSocket.onmessage = handleWebsocketMessage;
+  AppState.webSocket.onclose = () => {
+    while (App.door.lastElementChild) {
+      App.door.removeChild(App.door.lastElementChild);
+    }
+    App.door.appendChild(App.loaderElement);
+  };
 
-// Window that represents the total area of magnets in the DOM
-// This is a 3x3 grid of [viewport area] centered at the actual viewport
-class Window {
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
+  AppState.webSocket.onreconnect = () => {
+    AppState.updateCoordinatesFromHash();
+    App.door.removeChild(App.loaderElement);
+  };
 
-  constructor(x1: number, y1: number, x2: number, y2: number) {
-    this.x1 = x1;
-    this.y1 = y1;
-    this.x2 = x2;
-    this.y2 = y2;
-  }
+  AppState.webSocket.ontimeout = () => {
+    while (App.door.lastElementChild) {
+      App.door.removeChild(App.door.lastElementChild);
+    }
+    App.door.appendChild(App.reloadButton);
+  };
 
-  contains(x: number, y: number): boolean {
-    return x >= this.x1 && x <= this.x2 && y >= this.y1 && y <= this.y2;
-  }
+  globalThis.addEventListener("hashchange", AppState.updateCoordinatesFromHash);
+  AppState.updateCoordinatesFromHash();
 
-  pack() {
-    return pack([this.x1, this.y1, this.x2, this.y2]);
-  }
+  App.door.removeChild(App.loaderElement);
+
+  setupDocumentEventListeners();
+
+  App.door.style.setProperty("--scale", "0.5");
+
+  requestAnimationFrame(animateZoom);
 }
 
-// Elements that are currently in a transition animation
-// because it was moved by someone else...
-const transitioning = new Map<number, HTMLElement>();
-
-function chooseRandomEdgeCoords() {
-  let x = 0;
-  let y = 0;
-  const rand = Math.random();
-  if (rand < 0.25) {
-    x = viewWindow.x1;
-    y =
-      Math.floor(Math.random() * (viewWindow.y2 - viewWindow.y1 + 1)) +
-      viewWindow.y2;
-  } else if (rand < 0.5) {
-    x = viewWindow.x2;
-    y =
-      Math.floor(Math.random() * (viewWindow.y2 - viewWindow.y1 + 1)) +
-      viewWindow.y2;
-  } else if (rand < 0.75) {
-    y = viewWindow.y1;
-    x =
-      Math.floor(Math.random() * (viewWindow.x2 - viewWindow.x1 + 1)) +
-      viewWindow.x2;
-  } else {
-    y = viewWindow.y2;
-    x =
-      Math.floor(Math.random() * (viewWindow.x2 - viewWindow.x1 + 1)) +
-      viewWindow.x2;
+// Add new elements to DOM, remove old elements
+function replaceMagnets(door: HTMLElement, magnetArray: Magnet[]) {
+  // Add new elements to document fragment to be added as a batch
+  const newElements = new DocumentFragment();
+  for (const magnet of magnetArray) {
+    const element = document.getElementById(`${magnet.id}`);
+    if (element) {
+      element.style.setProperty("--x", `${magnet.x}px`);
+      element.style.setProperty("--y", `${magnet.y}px`);
+      element.style.setProperty("--rotation", `${magnet.rotation}deg`);
+      element.style.zIndex = magnet.zIndex.toString();
+    } else {
+      newElements.append(magnet.toElement(AppState.webSocket));
+    }
   }
 
-  return [x, y];
+  // remove all now-out-of-bounds magnets
+  door.querySelectorAll(".magnet").forEach((element) => {
+    const magnet = element as HTMLElement;
+    if (
+      !AppState.viewWindow.contains(
+        parseInt(magnet.style.getPropertyValue("--x")),
+        parseInt(magnet.style.getPropertyValue("--y")),
+      )
+    ) {
+      door.removeChild(magnet);
+    }
+  });
+
+  // add new magnets after removing old ones so we don't have to iterate over them
+  door.append(newElements);
 }
 
-function transitionElement(
+function startElementTransitionAnimation(
+  transition_map: Map<number, HTMLElement>,
   element: HTMLElement,
   registerTimout: boolean,
   x: string,
@@ -93,188 +106,15 @@ function transitionElement(
   }
 
   if (registerTimout) {
-    transitioning.set(id, element);
+    transition_map.set(id, element);
     setTimeout(() => {
-      if (transitioning.has(id)) {
+      if (transition_map.has(id)) {
         element.style.transition = "";
-        transitioning.delete(id);
+        transition_map.delete(id);
       }
     }, 500);
   }
 }
-
-const door = document.getElementById("door")!;
-let viewWindow: Window;
-
-// Add new elements to DOM, remove old elements
-function replaceMagnets(magnetArray: Magnet[]) {
-  // Add new elements to document fragment to be added as a batch
-  const newElements = new DocumentFragment();
-  for (const magnet of magnetArray) {
-    const element = document.getElementById(`${magnet.id}`);
-    if (element) {
-      element.style.setProperty("--x", `${magnet.x}px`);
-      element.style.setProperty("--y", `${magnet.y}px`);
-      element.style.setProperty("--rotation", `${magnet.rotation}deg`);
-      element.style.zIndex = magnet.zIndex.toString();
-    } else {
-      newElements.append(magnet.toElement(webSocket));
-    }
-  }
-
-  // remove all now-out-of-bounds magnets
-  door.querySelectorAll(".magnet").forEach((element) => {
-    const magnet = element as HTMLElement;
-    if (
-      !viewWindow.contains(
-        parseInt(magnet.style.getPropertyValue("--x")),
-        parseInt(magnet.style.getPropertyValue("--y")),
-      )
-    ) {
-      door.removeChild(magnet);
-    }
-  });
-
-  // add new magnets after removing old ones so we don't have to iterate over them
-  door.append(newElements);
-}
-
-const loaderElement = document.getElementById("loader")!;
-
-export class ReconnectingWebSocket {
-  private url: string;
-  private protocols: string | string[];
-  private socket: WebSocket | null;
-  private hasConnectedBefore: boolean;
-  private reconnectAttempts: number;
-  private maxReconnectAttempts: number;
-  private reconnectInterval: number;
-  private maxReconnectInterval: number;
-  private reconnectTimeoutId: number | null;
-  private visibilityChangeHandler: (event: Event) => void;
-
-  public onopen: ((event: Event) => void) | null;
-  public onclose: ((event: CloseEvent) => void) | null;
-  public onreconnect: ((event: Event) => void) | null;
-  public onmessage: ((event: MessageEvent) => void) | null;
-  public onerror: ((event: Event) => void) | null;
-  public ontimeout: ((event: CloseEvent) => void) | null;
-
-  constructor(url: string, protocols: string | string[] = []) {
-    this.url = url;
-    this.protocols = protocols;
-    this.socket = null;
-    this.hasConnectedBefore = false;
-    this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = 100;
-    this.reconnectInterval = 1000;
-    this.maxReconnectInterval = 30000;
-    this.reconnectTimeoutId = null;
-
-    this.onopen = null;
-    this.onclose = null;
-    this.onreconnect = null;
-    this.onmessage = null;
-    this.onerror = null;
-    this.ontimeout = null;
-
-    this.visibilityChangeHandler = this.handleVisibilityChange.bind(this);
-    document.addEventListener("visibilitychange", this.visibilityChangeHandler);
-
-    this.connect();
-  }
-
-  private connect() {
-    if (document.hidden || this.socket?.readyState === WebSocket.OPEN) {
-      return;
-    }
-
-    if (this.reconnectTimeoutId !== null) {
-      clearTimeout(this.reconnectTimeoutId);
-      this.reconnectTimeoutId = null;
-    }
-
-    this.socket = new WebSocket(this.url, this.protocols);
-    this.scheduleReconnect();
-
-    this.socket.onopen = (event: Event) => {
-      this.reconnectAttempts = 0;
-      this.reconnectInterval = 1000;
-
-      if (!this.hasConnectedBefore) {
-        this.hasConnectedBefore = true;
-        if (this.onopen) this.onopen(event);
-      } else {
-        if (this.onreconnect) this.onreconnect(event);
-      }
-    };
-
-    this.socket.onclose = (event: CloseEvent) => {
-      if (this.onclose) this.onclose(event);
-
-      if (!document.hidden) {
-        if (event.code === 1001) {
-          // Away code = server idle timeout
-          if (this.ontimeout) this.ontimeout(event);
-        } else {
-          this.scheduleReconnect();
-        }
-      }
-    };
-
-    this.socket.onmessage = (event: MessageEvent) => {
-      if (this.onmessage) this.onmessage(event);
-    };
-
-    this.socket.onerror = (event: Event) => {
-      if (this.onerror) this.onerror(event);
-    };
-  }
-
-  private handleVisibilityChange() {
-    if (!document.hidden && this.socket?.readyState !== WebSocket.OPEN) {
-      this.reconnectAttempts = 0;
-      this.reconnectInterval = 1000;
-      this.connect();
-    }
-  }
-
-  private scheduleReconnect() {
-    if (
-      this.socket?.readyState === WebSocket.OPEN ||
-      document.hidden ||
-      this.reconnectAttempts >= this.maxReconnectAttempts
-    ) {
-      return;
-    }
-
-    const timeout = this.reconnectInterval;
-    this.reconnectInterval = Math.min(
-      this.reconnectInterval * 1.5,
-      this.maxReconnectInterval,
-    );
-    this.reconnectAttempts++;
-
-    this.reconnectTimeoutId = globalThis.setTimeout(
-      () => this.connect(),
-      timeout,
-    );
-  }
-
-  public send(
-    data: string | ArrayBufferLike | Blob | ArrayBufferView,
-  ): boolean {
-    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-      this.socket.send(data);
-      return true;
-    }
-    return false;
-  }
-}
-
-const webSocket = new ReconnectingWebSocket(WS_URL);
-webSocket.onopen = setupWebSocket;
-const sessionIdDiv = document.getElementById("session-id")! as HTMLDivElement;
 
 // TODO please please use zod on this or something
 async function handleWebsocketMessage(e: MessageEvent) {
@@ -288,15 +128,15 @@ async function handleWebsocketMessage(e: MessageEvent) {
     for (const val of update) {
       magnets.push(new Magnet(val[0], val[1], val[2], val[3], val[4], val[5]));
     }
-    replaceMagnets(magnets);
+    replaceMagnets(App.door, magnets);
   } else if (update[5] !== undefined) {
     if (uuidv7.validate(update)) {
-      sessionIdDiv.innerText = update;
+      App.sessionIdDiv.innerText = update;
       return;
     }
 
     // New object arriving from out of bounds, create it
-    const [x, y] = chooseRandomEdgeCoords();
+    const [x, y] = AppState.viewWindow.chooseRandomEdgeCoords();
 
     const element = new Magnet(
       update[0],
@@ -305,13 +145,19 @@ async function handleWebsocketMessage(e: MessageEvent) {
       update[3],
       update[4],
       update[5],
-    ).toElement(webSocket);
+    ).toElement(AppState.webSocket);
 
     requestAnimationFrame(() => {
-      door.append(element);
+      App.door.append(element);
 
       requestAnimationFrame(() => {
-        transitionElement(element, true, update[1], update[2]);
+        startElementTransitionAnimation(
+          AppState.transitioning,
+          element,
+          true,
+          update[1],
+          update[2],
+        );
       });
     });
   } else if (update[4] !== undefined) {
@@ -332,315 +178,239 @@ async function handleWebsocketMessage(e: MessageEvent) {
       return;
     }
 
-    transitionElement(element, true, newX, newY, update[3], zIndex);
+    startElementTransitionAnimation(
+      AppState.transitioning,
+      element,
+      true,
+      newX,
+      newY,
+      update[3],
+      zIndex,
+    );
   } else if (update && update.length !== 0) {
     // Received indication that magnet was removed from our window
     const element = document.getElementById(`${update}`)!;
 
-    const [x, y] = chooseRandomEdgeCoords();
+    const [x, y] = AppState.viewWindow.chooseRandomEdgeCoords();
 
-    transitionElement(element, false, `${x}px`, `${y}px`);
+    startElementTransitionAnimation(
+      AppState.transitioning,
+      element,
+      false,
+      `${x}px`,
+      `${y}px`,
+    );
 
     setTimeout(() => {
-      door.removeChild(element);
+      App.door.removeChild(element);
     }, 500);
   }
 }
 
-const newAreaButton = document.getElementById(
-  "new-area-button",
-)! as HTMLButtonElement;
+function setupDocumentEventListeners() {
+  const dragState = {
+    evCache: [] as PointerEvent[],
+    prevDiff: -1,
 
-const shareButton = document.getElementById(
-  "share-button",
-)! as HTMLButtonElement;
+    isDraggingWindow: false,
 
-const reloadButton = document.createElement("button");
-reloadButton.className = "fake-magnet";
-reloadButton.style.setProperty("--rotation", "2deg");
-reloadButton.style.position = "absolute";
-reloadButton.style.top = "50%";
-reloadButton.style.left = "50%";
-reloadButton.style.transform = "translate(-50%, -50%)";
-reloadButton.innerText = "Connection lost, click to reload";
-reloadButton.addEventListener("click", () => {
-  location.reload();
-});
+    // starting x, y of cursor relative to world origin
+    startingX: 0,
+    startingY: 0,
 
-// Don't rerun all this logic if we are reconnecting to lost websocket connection
-function setupWebSocket() {
-  let isDraggingWindow = false;
-
-  // starting x, y of cursor relative to world origin
-  let startingX = 0;
-  let startingY = 0;
-
-  // current coordinates of viewport center relative to world origin
-  let centerX = 0;
-  let centerY = 0;
-
-  let originalCenterX = 0;
-  let originalCenterY = 0;
-
-  let resizeTimer: number | null = null;
-
-  webSocket.onmessage = handleWebsocketMessage;
-  webSocket.onclose = () => {
-    while (door.lastElementChild) {
-      door.removeChild(door.lastElementChild);
-    }
-    door.appendChild(loaderElement);
+    originalCenterX: 0,
+    originalCenterY: 0,
   };
 
-  webSocket.onreconnect = () => {
-    updateCoordinatesFromHash();
-    door.removeChild(loaderElement);
-  };
+  App.newAreaButton.addEventListener("click", () => {
+    Utils.makeNewHash();
 
-  webSocket.ontimeout = () => {
-    while (door.lastElementChild) {
-      door.removeChild(door.lastElementChild);
-    }
-    door.appendChild(reloadButton);
-  };
+    App.newAreaButton.disabled = true;
+    App.newAreaButton.style.color = "darkgray";
 
-  // Re-request the whole window in case stuff was lost while disconnected
-  updateCoordinatesFromHash();
+    setTimeout(() => {
+      App.newAreaButton.style.color = "";
+      App.newAreaButton.disabled = false;
+    }, 1000);
+  });
 
-  function makeNewHash() {
-    const randomX = Math.round(Math.random() * 20000 - 10000);
-    const randomY = Math.round(Math.random() * 20000 - 10000);
-    globalThis.location.replace(`#x=${randomX}&y=${randomY}`);
-  }
+  App.shareButton.addEventListener("click", async () => {
+    await navigator.clipboard.writeText(globalThis.location.href);
+    App.shareButton.innerText = "Copied!";
+    setTimeout(() => {
+      App.shareButton.innerText = "Share location";
+    }, 2000);
+  });
 
-  function startResizeTimer() {
-    if (resizeTimer !== null) {
-      clearTimeout(resizeTimer);
-    }
-    resizeTimer = setTimeout(function () {
-      updateCoordinatesFromHash();
-    }, 500);
-  }
+  document.addEventListener(
+    "pointerdown",
+    (e) => {
+      // ignore right clicks
+      if (e.button !== 0) return;
 
-  function updateCoordinatesFromHash() {
-    if (resizeTimer) {
-      clearTimeout(resizeTimer);
-    }
+      // store multiple finger presses for pinch/zoom
+      dragState.evCache.push(e);
+      if (dragState.evCache.length > 1) return;
 
-    const params = new URLSearchParams(globalThis.location.hash.slice(1));
+      AppState.transitioning.forEach((element) => {
+        element.style.transition = "";
+      });
+      AppState.transitioning.clear();
 
-    centerX = parseInt(params.get("x") || "NaN");
-    centerY = parseInt(params.get("y") || "NaN");
-    if (isNaN(centerX) || isNaN(centerY)) {
-      makeNewHash();
-      return;
-    }
+      const target = e.target as HTMLElement;
 
-    door.style.setProperty("--center-x", `${centerX}px`);
-    door.style.setProperty("--center-y", `${centerY}px`);
+      // remove rotation dot if it's showing on any magnet
+      if (clickedElement && !clickedElement.contains(target)) {
+        hideRotationDot();
+      }
 
-    // request magnets within the bounds of our new window
-    viewWindow = new Window(
-      Math.round(centerX - (1.5 * globalThis.innerWidth) / scale - 15),
-      Math.round(centerY - (1.5 * globalThis.innerHeight) / scale - 15),
-      Math.round(centerX + (1.5 * globalThis.innerWidth) / scale + 15),
-      Math.round(centerY + (1.5 * globalThis.innerHeight) / scale + 15),
-    );
+      if (e.target !== App.door || dragState.isDraggingWindow) {
+        return;
+      }
 
-    webSocket.send(viewWindow.pack());
-  }
+      App.door.setPointerCapture(e.pointerId);
+      dragState.isDraggingWindow = true;
 
-  globalThis.addEventListener("hashchange", updateCoordinatesFromHash);
-  updateCoordinatesFromHash();
+      dragState.originalCenterX = AppState.centerX;
+      dragState.originalCenterY = AppState.centerY;
 
-  door.removeChild(loaderElement);
+      // starting coordinates of mouse relative to world origin
+      dragState.startingX =
+        AppState.centerX +
+        (e.clientX - globalThis.innerWidth / 2) / AppState.scale;
+      dragState.startingY =
+        -AppState.centerY +
+        (e.clientY - globalThis.innerHeight / 2) / AppState.scale;
+    },
+    { passive: true },
+  );
 
-  const evCache: PointerEvent[] = [];
-  let prevDiff = -1;
+  document.addEventListener(
+    "pointermove",
+    (e) => {
+      if (isDraggingMagnet) return;
 
-  setupDocumentEventListeners();
-
-  door.style.setProperty("--scale", "0.5");
-  let startTime = 0;
-  const animationDuration = 2000;
-  let isInLoadingAnimation = false;
-  function zoomAnimation(now: number) {
-    if (startTime === 0) {
-      isInLoadingAnimation = true;
-      startTime = now;
-    }
-
-    const percentDone = (now - startTime) / animationDuration;
-    if (percentDone >= 1) {
-      door.style.setProperty("--scale", "1");
-      isInLoadingAnimation = false;
-    } else {
-      door.style.setProperty(
-        "--scale",
-        `${0.5 + ease.easeOutCubic(percentDone) * 0.5}`,
+      const index = dragState.evCache.findIndex(
+        (cachedEv) => cachedEv.pointerId == e.pointerId,
       );
-      requestAnimationFrame(zoomAnimation);
-    }
-  }
+      dragState.evCache[index] = e;
 
-  requestAnimationFrame(zoomAnimation);
+      if (dragState.evCache.length === 2 && !AppState.isInLoadingAnimation) {
+        const xDiff =
+          dragState.evCache[0].clientX - dragState.evCache[1].clientX;
+        const yDiff =
+          dragState.evCache[0].clientY - dragState.evCache[1].clientY;
+        const curDiff = Math.sqrt(xDiff * xDiff + yDiff * yDiff);
 
-  function setupDocumentEventListeners() {
-    newAreaButton.addEventListener("click", () => {
-      makeNewHash();
-      updateCoordinatesFromHash();
-
-      newAreaButton.disabled = true;
-      newAreaButton.style.color = "darkgray";
-
-      setTimeout(() => {
-        newAreaButton.style.color = "";
-        newAreaButton.disabled = false;
-      }, 1000);
-    });
-
-    shareButton.addEventListener("click", async () => {
-      await navigator.clipboard.writeText(globalThis.location.href);
-      shareButton.innerText = "Copied!";
-      setTimeout(() => {
-        shareButton.innerText = "Share location";
-      }, 2000);
-    });
-
-    document.addEventListener(
-      "pointerdown",
-      (e) => {
-        // ignore right clicks
-        if (e.button !== 0) return;
-
-        // store multiple finger presses for pinch/zoom
-        evCache.push(e);
-        if (evCache.length > 1) return;
-
-        transitioning.forEach((element) => {
-          element.style.transition = "";
-        });
-        transitioning.clear();
-
-        const target = e.target as HTMLElement;
-
-        // remove rotation dot if it's showing on any magnet
-        if (clickedElement && !clickedElement.contains(target)) {
-          hideRotationDot();
-        }
-
-        if (e.target !== door || isDraggingWindow) {
-          return;
-        }
-
-        door.setPointerCapture(e.pointerId);
-        isDraggingWindow = true;
-
-        originalCenterX = centerX;
-        originalCenterY = centerY;
-
-        // starting coordinates of mouse relative to world origin
-        startingX = centerX + (e.clientX - globalThis.innerWidth / 2) / scale;
-        startingY = -centerY + (e.clientY - globalThis.innerHeight / 2) / scale;
-      },
-      { passive: true },
-    );
-
-    document.addEventListener(
-      "pointermove",
-      (e) => {
-        if (isDraggingMagnet) return;
-
-        const index = evCache.findIndex(
-          (cachedEv) => cachedEv.pointerId == e.pointerId,
-        );
-        evCache[index] = e;
-
-        if (evCache.length === 2 && !isInLoadingAnimation) {
-          const xDiff = evCache[0].clientX - evCache[1].clientX;
-          const yDiff = evCache[0].clientY - evCache[1].clientY;
-          const curDiff = Math.sqrt(xDiff * xDiff + yDiff * yDiff);
-
-          if (prevDiff > 0) {
-            scale += (curDiff - prevDiff) / 500;
-            scale = Math.min(Math.max(0.5, scale), 1.5);
-            requestAnimationFrame(() => {
-              startResizeTimer();
-              door.style.setProperty("--scale", `${scale}`);
-            });
-          }
-
-          prevDiff = curDiff;
-        } else if (evCache.length === 1 && isDraggingWindow) {
-          centerX = Math.floor(
-            startingX - (e.clientX - globalThis.innerWidth / 2) / scale,
+        if (dragState.prevDiff > 0) {
+          AppState.setScale(
+            AppState.scale + (curDiff - dragState.prevDiff) / 500,
           );
-          centerY = -Math.floor(
-            startingY - (e.clientY - globalThis.innerHeight / 2) / scale,
-          );
-
+          AppState.setScale(Math.min(Math.max(0.5, AppState.scale), 1.5));
           requestAnimationFrame(() => {
-            door.style.setProperty("--center-x", `${centerX}px`);
-            door.style.setProperty("--center-y", `${centerY}px`);
+            App.door.style.setProperty("--scale", `${AppState.scale}`);
+            AppState.startResizeTimer();
           });
         }
-      },
-      { passive: true },
-    );
 
-    document.addEventListener(
-      "pointerup",
-      (e) => {
-        const index = evCache.findIndex(
-          (cachedEv) => cachedEv.pointerId === e.pointerId,
+        dragState.prevDiff = curDiff;
+      } else if (dragState.evCache.length === 1 && dragState.isDraggingWindow) {
+        AppState.setCenter(
+          Math.floor(
+            dragState.startingX -
+              (e.clientX - globalThis.innerWidth / 2) / AppState.scale,
+          ),
+          -Math.floor(
+            dragState.startingY -
+              (e.clientY - globalThis.innerHeight / 2) / AppState.scale,
+          ),
         );
-        evCache.splice(index, 1);
 
-        if (evCache.length < 2) {
-          prevDiff = -1;
-        }
-
-        if (!isDraggingWindow) return;
-        door.releasePointerCapture(e.pointerId);
-        isDraggingWindow = false;
-
-        const xDiff = Math.abs(centerX - originalCenterX);
-        const yDiff = Math.abs(centerY - originalCenterY);
-
-        if (xDiff >= 1.0 || yDiff >= 1.0) {
-          globalThis.location.replace(
-            `#x=${Math.round(centerX)}&y=${Math.round(centerY)}`,
-          );
-        }
-      },
-      { passive: true },
-    );
-
-    document.addEventListener(
-      "dblclick",
-      (e) => {
-        e.preventDefault();
-      },
-      { passive: false },
-    );
-
-    globalThis.addEventListener("resize", () => {
-      requestAnimationFrame(startResizeTimer);
-    });
-
-    document.addEventListener(
-      "wheel",
-      (e) => {
-        if (isInLoadingAnimation) return;
-        scale += e.deltaY * -0.001;
-        scale = Math.min(Math.max(0.5, scale), 1.5);
         requestAnimationFrame(() => {
-          door.style.setProperty("--scale", `${scale}`);
-
-          startResizeTimer();
+          App.door.style.setProperty("--center-x", `${AppState.centerX}px`);
+          App.door.style.setProperty("--center-y", `${AppState.centerY}px`);
         });
-      },
-      { passive: true },
+      }
+    },
+    { passive: true },
+  );
+
+  document.addEventListener(
+    "pointerup",
+    (e) => {
+      const index = dragState.evCache.findIndex(
+        (cachedEv) => cachedEv.pointerId === e.pointerId,
+      );
+      dragState.evCache.splice(index, 1);
+
+      if (dragState.evCache.length < 2) {
+        dragState.prevDiff = -1;
+      }
+
+      if (!dragState.isDraggingWindow) return;
+      App.door.releasePointerCapture(e.pointerId);
+      dragState.isDraggingWindow = false;
+
+      const xDiff = Math.abs(AppState.centerX - dragState.originalCenterX);
+      const yDiff = Math.abs(AppState.centerY - dragState.originalCenterY);
+
+      if (xDiff >= 1.0 || yDiff >= 1.0) {
+        globalThis.location.replace(
+          `#x=${Math.round(AppState.centerX)}&y=${Math.round(AppState.centerY)}`,
+        );
+      }
+    },
+    { passive: true },
+  );
+
+  document.addEventListener(
+    "dblclick",
+    (e) => {
+      e.preventDefault();
+    },
+    { passive: false },
+  );
+
+  globalThis.addEventListener("resize", () => {
+    requestAnimationFrame(AppState.startResizeTimer);
+  });
+
+  document.addEventListener(
+    "wheel",
+    (e) => {
+      if (AppState.isInLoadingAnimation) return;
+      AppState.setScale(AppState.scale + e.deltaY * -0.001);
+      AppState.setScale(Math.min(Math.max(0.5, AppState.scale), 1.5));
+      requestAnimationFrame(() => {
+        App.door.style.setProperty("--scale", `${AppState.scale}`);
+
+        AppState.startResizeTimer();
+      });
+    },
+    { passive: true },
+  );
+}
+
+const zoomState = {
+  startTime: 0,
+};
+
+function animateZoom(now: number) {
+  if (zoomState.startTime === 0) {
+    AppState.setIsInLoadingAnimation(true);
+    zoomState.startTime = now;
+  }
+
+  const percentDone =
+    (now - zoomState.startTime) / Config.START_ANIMATION_DURATION;
+  if (percentDone >= 1) {
+    App.door.style.setProperty("--scale", "1");
+    AppState.setIsInLoadingAnimation(false);
+  } else {
+    App.door.style.setProperty(
+      "--scale",
+      `${0.5 + ease.easeOutCubic(percentDone) * 0.5}`,
     );
+    requestAnimationFrame(animateZoom);
   }
 }
