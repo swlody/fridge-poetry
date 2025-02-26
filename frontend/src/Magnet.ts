@@ -1,6 +1,8 @@
 import { pack } from "msgpackr";
 
-import { scale, ReconnectingWebSocket } from "./main.ts";
+import { App } from "./App.ts";
+import * as AppState from "./AppState.ts";
+import { ReconnectingWebSocket } from "./ReconnectingWebSocket.ts";
 
 export let clickedElement: HTMLElement | null = null;
 export let isDraggingMagnet = false;
@@ -47,27 +49,20 @@ export class Magnet {
   }
 }
 
-const rotationDot = document.createElement("div");
-rotationDot.hidden = true;
-rotationDot.className = "rotate-dot";
-const rotationLink = document.createElement("div");
-rotationLink.hidden = true;
-rotationLink.className = "rotate-link";
-
 function showRotationDotOn(element: HTMLElement) {
   clickedElement = element;
-  element.appendChild(rotationDot);
-  element.appendChild(rotationLink);
-  rotationDot.hidden = false;
-  rotationLink.hidden = false;
+  element.appendChild(App.rotationDot);
+  element.appendChild(App.rotationLink);
+  App.rotationDot.hidden = false;
+  App.rotationLink.hidden = false;
 }
 
 export function hideRotationDot() {
   if (clickedElement) {
-    clickedElement.removeChild(rotationDot);
-    clickedElement.removeChild(rotationLink);
-    rotationDot.hidden = true;
-    rotationLink.hidden = true;
+    clickedElement.removeChild(App.rotationDot);
+    clickedElement.removeChild(App.rotationLink);
+    App.rotationDot.hidden = true;
+    App.rotationLink.hidden = true;
     clickedElement = null;
   }
 }
@@ -79,6 +74,15 @@ function packedMagnetUpdate(
   rotation: number,
 ) {
   return pack([true, id, x, y, rotation]);
+}
+
+function getAngle(element: HTMLElement, clientX: number, clientY: number) {
+  const rect = element.getBoundingClientRect();
+  const centerX = rect.left + rect.width / 2;
+  const centerY = rect.top + rect.height / 2;
+
+  // Calculate angle in radians, then convert to degrees
+  return Math.atan2(clientY - centerY, clientX - centerX) * (180 / Math.PI);
 }
 
 function setupEventListeners(
@@ -101,15 +105,6 @@ function setupEventListeners(
   let initialRotation = 0;
   let initialAngle = 0;
 
-  function getAngle(element: HTMLElement, clientX: number, clientY: number) {
-    const rect = element.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
-
-    // Calculate angle in radians, then convert to degrees
-    return Math.atan2(clientY - centerY, clientX - centerX) * (180 / Math.PI);
-  }
-
   element.addEventListener(
     "pointerdown",
     (e) => {
@@ -117,7 +112,7 @@ function setupEventListeners(
 
       element.setPointerCapture(e.pointerId);
 
-      if (e.target === rotationDot) {
+      if (e.target === App.rotationDot) {
         rotating = true;
         initialRotation =
           parseInt(element.style.getPropertyValue("--rotation")) || 0;
@@ -133,8 +128,8 @@ function setupEventListeners(
         originalX = parseInt(element.style.getPropertyValue("--x"));
         originalY = parseInt(element.style.getPropertyValue("--y"));
 
-        startX = e.clientX / scale - originalX;
-        startY = -e.clientY / scale - originalY;
+        startX = e.clientX / AppState.scale - originalX;
+        startY = -e.clientY / AppState.scale - originalY;
       }
     },
     { passive: true },
@@ -148,8 +143,8 @@ function setupEventListeners(
 
         hasChanged = true;
 
-        newX = e.clientX / scale - startX;
-        newY = -e.clientY / scale - startY;
+        newX = e.clientX / AppState.scale - startX;
+        newY = -e.clientY / AppState.scale - startY;
 
         newX = Math.max(-500000, Math.min(500000, newX));
         newY = Math.max(-500000, Math.min(500000, newY));
