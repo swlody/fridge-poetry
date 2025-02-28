@@ -202,13 +202,20 @@ async fn run(config: Config) -> Result<()> {
 }
 
 async fn accept_connection(stream: TcpStream, state: AppState) {
-    let peer_addr = stream
+    let stream_peer_ip = stream
         .peer_addr()
         .map(|a| a.to_string())
         .unwrap_or_default();
 
     match tokio_websockets::ServerBuilder::new().accept(stream).await {
-        Ok((_request, ws_stream)) => {
+        Ok((request, ws_stream)) => {
+            let peer_addr = request
+                .headers()
+                .get("CF-Connecting-IP")
+                .and_then(|hv| hv.to_str().ok())
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(stream_peer_ip);
+
             let session_id = Uuid::now_v7();
             tracing::debug!(
                 "Creating new session with session_id: {session_id} for peer: {peer_addr}",
