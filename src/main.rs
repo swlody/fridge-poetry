@@ -136,10 +136,7 @@ async fn run(config: Config) -> Result<()> {
         .connect(config.database_url.expose_secret())
         .await?;
 
-    sqlx::migrate!()
-        .run(&pool)
-        .await
-        .expect("Failed to run migrations");
+    sqlx::migrate!().run(&pool).await?;
 
     let token: CancellationToken = CancellationToken::new();
     let mut pg_change_listener = PgListener::connect_with(&pool).await?;
