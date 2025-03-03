@@ -63,6 +63,10 @@ body {
   -webkit-user-drag: none;
 }
 
+.magnet:has(> img.qr) {
+  padding: 0;
+}
+
 .fake-magnet {
   border: 1px solid black;
   display: inline-block;
