@@ -56,7 +56,9 @@ struct ClientMagnetUpdate {
 
 impl ClientMagnetUpdate {
     fn is_valid(&self, window: &Window) -> bool {
-        if self.id > 20_000_100 {
+        const MAX_MAGNET_ID: i32 = 22_000_000;
+
+        if self.id > MAX_MAGNET_ID {
             tracing::trace!("Invalid id: {}", self.id);
             return false;
         }
