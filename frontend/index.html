@@ -18,97 +18,17 @@
       content="https://fridgepoem.com/static/thumbnail.png"
     />
     <meta property="og:url" content="https://fridgepoem.com" />
-    <script type="module" src="/src/main.ts"></script>
+    <link rel="stylesheet" href="static/style-fallback.css" />
   </head>
   <body>
     <main id="door">
-      <div id="loader" class="loader"></div>
-    </main>
-    <div id="popover-container">
-      <div id="about-dialog" popover>
-        <div id="about-inner">
-          <div>
-            <div class="fake-magnet" style="--rotation: 2deg">drag</div>
-            <div class="fake-magnet" style="--rotation: -1deg">background</div>
-            <div class="fake-magnet" style="--rotation: -3deg">to</div>
-            <div class="fake-magnet" style="--rotation: 1deg">navigate</div>
-          </div>
-          <div>
-            <div class="fake-magnet" style="--rotation: -2deg">pinch</div>
-            <div class="fake-magnet" style="--rotation: -1deg">or</div>
-            <div class="fake-magnet" style="--rotation: 4deg">drag</div>
-            <div class="fake-magnet" style="--rotation: -1deg">to</div>
-            <div class="fake-magnet" style="--rotation: -3deg">zoom</div>
-          </div>
-          <div>
-            <div class="fake-magnet" style="--rotation: -2deg">drag</div>
-            <div class="fake-magnet" style="--rotation: 2deg">magnets</div>
-            <div class="fake-magnet" style="--rotation: -4deg">to</div>
-            <div class="fake-magnet" style="--rotation: -1deg">move</div>
-            <div class="fake-magnet" style="--rotation: -3deg">them</div>
-          </div>
-          <div>
-            <div class="fake-magnet" style="--rotation: 4deg">click</div>
-            <div class="fake-magnet" style="--rotation: 2deg">magnets</div>
-            <div class="fake-magnet" style="--rotation: -4deg">to</div>
-            <div class="fake-magnet" style="--rotation: 3deg">rotate</div>
-            <div class="fake-magnet" style="--rotation: 1deg">them</div>
-          </div>
-          <div>
-            <div class="fake-magnet" style="--rotation: -2deg">save</div>
-            <div class="fake-magnet" style="--rotation: -1deg">the</div>
-            <div class="fake-magnet" style="--rotation: -3deg">URL</div>
-            <div class="fake-magnet" style="--rotation: 1deg">of</div>
-            <div class="fake-magnet" style="--rotation: 3deg">a</div>
-            <div class="fake-magnet" style="--rotation: 2deg">location</div>
-          </div>
-          <div>
-            <div class="fake-magnet" style="--rotation: 4deg">made</div>
-            <div class="fake-magnet" style="--rotation: 2deg">by</div>
-            <div class="fake-magnet" style="--rotation: -3deg">
-              <a href="https://swlody.dev" target="_blank">Sam Wlody</a>
-            </div>
-            <div class="fake-magnet" style="--rotation: 1deg">@</div>
-            <div class="fake-magnet" style="--rotation: -3deg">
-              <a
-                href="https://www.recurse.com/scout/click?t=6f1a4828561e63ce05208b7fa4e098df"
-                target="_blank"
-              >
-                Recurse Center
-              </a>
-            </div>
-          </div>
-          <div>
-            <div class="fake-magnet" style="--rotation: 1deg">
-              <a href="mailto:feedback@fridgepoem.com">Feedback</a>
-            </div>
-          </div>
-          <div>
-            <div class="fake-magnet" style="--rotation: -1deg">Session ID:</div>
-            <div
-              id="session-id"
-              class="fake-magnet"
-              style="--rotation: 1deg; user-select: all; font-size: small"
-            ></div>
-          </div>
-        </div>
+      <div class="error">
+        <div class="fake-magnet" style="--rotation: 2deg">temporarily</div>
+        <div class="fake-magnet" style="--rotation: -1deg">down</div>
+        <div class="fake-magnet" style="--rotation: -3deg">for</div>
+        <div class="fake-magnet" style="--rotation: 1deg">scheduled</div>
+        <div class="fake-magnet" style="--rotation: 1deg">maintenance</div>
       </div>
-    </div>
-    <footer>
-      <button id="new-area-button" class="fake-magnet" style="--rotation: 2deg">
-        Random location
-      </button>
-      <button id="share-button" class="fake-magnet" style="--rotation: -1deg">
-        Share location
-      </button>
-      <button
-        id="about-button"
-        class="fake-magnet"
-        popovertarget="about-dialog"
-        style="--rotation: -3deg"
-      >
-        About
-      </button>
-    </footer>
+    </main>
   </body>
 </html>
