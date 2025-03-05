@@ -33,3 +33,23 @@ export const App = {
     return rotationLink;
   })(),
 };
+
+export const contentWarningPopover = `<div id="content-warning-container" class="outer-popover">
+  <div id="content-warning-dialog" class="middle-popover" popover>
+    <div id="content-warning-inner" class="inner-popover">
+      <div class="fake-magnet" style="text-align: center">
+        Hello! It looks like you were directed here from my resume.
+        <br />
+        All of the content here is user generated which means that there may be some dirty jokes here in addition to the nice poems.
+        <br />
+        I do my best to remove anything too objectionable, but the internet is the internet and I don't yet have any automated content moderation.
+        <br />
+        The repository can't be made public yet, but if you want to see it I can invite you to the private repo.
+        <br />
+        Thanks for checking out my project!
+        <br />
+        (Click off of this dialog to close it.)
+      </div>
+    </div>
+  </div>
+</div>`;

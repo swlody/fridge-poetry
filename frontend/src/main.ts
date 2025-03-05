@@ -2,7 +2,7 @@ import { unpack } from "msgpackr";
 import * as ease from "easing-utils";
 import * as uuidv7 from "jsr:@std/uuid/unstable-v7";
 
-import { App } from "./App.ts";
+import { App, contentWarningPopover } from "./App.ts";
 import * as AppState from "./AppState.ts";
 import * as Config from "./Config.ts";
 import {
@@ -15,8 +15,11 @@ import * as Utils from "./Utils.ts";
 
 import "./style.css";
 
+console.log("loading");
 AppState.webSocket.connect();
 AppState.webSocket.onopen = setupWebSocket;
+
+let contentWarning = false;
 
 function setupWebSocket() {
   AppState.webSocket.onmessage = handleWebsocketMessage;
@@ -39,12 +42,17 @@ function setupWebSocket() {
     App.door.appendChild(App.reloadButton);
   };
 
+  if (globalThis.location.search == "?contentWarning") {
+    contentWarning = true;
+    globalThis.history.replaceState(null, "", globalThis.location.pathname);
+  }
+
+  setupDocumentEventListeners();
+
   globalThis.addEventListener("hashchange", AppState.updateCoordinatesFromHash);
   AppState.updateCoordinatesFromHash();
 
   App.door.removeChild(App.loaderElement);
-
-  setupDocumentEventListeners();
 
   App.door.style.setProperty("--scale", "0.5");
 
@@ -82,6 +90,12 @@ function replaceMagnets(door: HTMLElement, magnetArray: Magnet[]) {
 
   // add new magnets after removing old ones so we don't have to iterate over them
   door.append(newElements);
+
+  if (contentWarning) {
+    contentWarning = false;
+    document.body.insertAdjacentHTML("beforeend", contentWarningPopover);
+    document.getElementById("content-warning-dialog")!.showPopover();
+  }
 }
 
 function startElementTransitionAnimation(

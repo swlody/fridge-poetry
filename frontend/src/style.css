@@ -111,7 +111,7 @@ body {
   background: none;
 }
 
-#popover-container:has(> :popover-open) {
+.outer-popover:has(> :popover-open) {
   backdrop-filter: blur(3px);
   position: absolute;
   top: 0;
@@ -120,12 +120,12 @@ body {
   height: 100%;
 }
 
-#about-dialog {
+.middle-popover {
   user-select: none;
   -webkit-user-select: none;
 }
 
-#about-inner {
+.inner-popover {
   display: flex;
   flex-direction: column;
   align-items: center;
