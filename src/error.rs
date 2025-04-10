@@ -52,8 +52,7 @@ impl FridgeError {
             FridgeError::Tungstenite(_) => {
                 // We experienced an error in sending a previous message,
                 // don't expect this one to complete
-                // note: 1006 = Abnormal Closure
-                Some(Message::close(Some(CloseCode::try_from(1006).unwrap()), ""))
+                Some(Message::close(Some(CloseCode::INTERNAL_SERVER_ERROR), ""))
             }
             FridgeError::Sqlx(sqlx::Error::RowNotFound) | FridgeError::OutOfBounds(_) => {
                 Some(Message::close(Some(CloseCode::POLICY_VIOLATION), ""))
