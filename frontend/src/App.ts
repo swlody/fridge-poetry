@@ -44,8 +44,6 @@ export const contentWarningPopover = `<div id="content-warning-container" class=
         <br />
         I do my best to remove anything too objectionable, but the internet is the internet and I don't yet have any automated content moderation.
         <br />
-        The repository can't be made public yet, but if you want to see it I can invite you to the private repo.
-        <br />
         Thanks for checking out my project!
         <br />
         (Click off of this dialog to close it.)
