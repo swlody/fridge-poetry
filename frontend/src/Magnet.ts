@@ -110,6 +110,11 @@ function setupEventListeners(
     (e) => {
       if (e.button !== 0) return;
 
+      const target = e.target as HTMLElement;
+      if (target.closest("a")) {
+        return;
+      }
+
       element.setPointerCapture(e.pointerId);
 
       if (e.target === App.rotationDot) {
