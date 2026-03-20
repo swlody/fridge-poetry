@@ -148,6 +148,11 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  color: darkgray;
+  cursor: not-allowed;
+}
+
 .loader {
   border: 12px solid lightgray;
   border-top: 12px solid plum;

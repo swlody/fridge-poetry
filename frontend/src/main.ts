@@ -240,10 +240,8 @@ function setupDocumentEventListeners() {
     Utils.makeNewHash();
 
     App.newAreaButton.disabled = true;
-    App.newAreaButton.style.color = "darkgray";
 
     setTimeout(() => {
-      App.newAreaButton.style.color = "";
       App.newAreaButton.disabled = false;
     }, 1000);
   });
