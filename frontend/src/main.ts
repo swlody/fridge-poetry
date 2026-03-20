@@ -1,6 +1,6 @@
 import { unpack } from "msgpackr";
 import * as ease from "easing-utils";
-import * as uuidv7 from "jsr:@std/uuid/unstable-v7";
+import * as uuidv7 from "@std/uuid/unstable-v7";
 
 import { App, contentWarningPopover } from "./App.ts";
 import * as AppState from "./AppState.ts";
