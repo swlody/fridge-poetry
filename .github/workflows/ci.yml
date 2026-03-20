@@ -129,13 +129,13 @@ jobs:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
           runs-on: ubuntu-latest
 
-      - name: Rollback frontend if failed
-        if: failure()
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: rollback --name fridge-poetry
+      # - name: Rollback frontend if failed
+      #   if: failure()
+      #   uses: cloudflare/wrangler-action@v3
+      #   with:
+      #     apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      #     accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      #     command: rollback --name fridge-poetry
 
   # build-test-artifacts:
   #   name: Build and archive tests
