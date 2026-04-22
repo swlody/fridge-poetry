@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS idx_magnets_coords ON magnets USING gist(coords);
