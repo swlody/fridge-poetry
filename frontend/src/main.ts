@@ -15,7 +15,6 @@ import * as Utils from "./Utils.ts";
 
 import "./style.css";
 
-console.log("loading");
 AppState.webSocket.connect();
 AppState.webSocket.onopen = setupWebSocket;
 
