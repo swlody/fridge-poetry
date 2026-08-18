@@ -13,18 +13,14 @@ RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
 RUN cargo build --release --bin fridge-poetry
 
-# Create debug info
-RUN objcopy --only-keep-debug --compress-debug-sections=zlib /app/target/release/fridge-poetry /app/target/release/fridge-poetry.debug
-RUN objcopy --strip-debug --strip-unneeded /app/target/release/fridge-poetry
-RUN objcopy --add-gnu-debuglink=/app/target/release/fridge-poetry.debug /app/target/release/fridge-poetry
-
-RUN curl -sL https://sentry.io/get-cli | bash
-
-# Upload debug info
-RUN mv /app/target/release/fridge-poetry.debug /app
+# Create debug info, upload to Sentry, and clean up
+RUN objcopy --only-keep-debug --compress-debug-sections=zlib /app/target/release/fridge-poetry /app/target/release/fridge-poetry.debug \
+    && objcopy --strip-debug --strip-unneeded /app/target/release/fridge-poetry \
+    && objcopy --add-gnu-debuglink=/app/target/release/fridge-poetry.debug /app/target/release/fridge-poetry \
+    && curl -sL https://sentry.io/get-cli | bash
 RUN --mount=type=secret,id=sentry_auth_token \
-    sentry-cli debug-files upload --include-sources --org sam-wlody --project fridge-poetry --auth-token $(cat /run/secrets/sentry_auth_token) /app/fridge-poetry.debug
-RUN rm /app/fridge-poetry.debug
+    sentry-cli debug-files upload --include-sources --org sam-wlody --project fridge-poetry --auth-token $(cat /run/secrets/sentry_auth_token) /app/target/release/fridge-poetry.debug \
+    && rm /app/target/release/fridge-poetry.debug
 
 # We do not need the Rust toolchain to run the binary!
 FROM debian:bookworm-slim AS runtime
