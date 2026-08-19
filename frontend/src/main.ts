@@ -13,6 +13,7 @@ import {
 } from "./Magnet.ts";
 import * as Utils from "./Utils.ts";
 
+import "@oddbird/popover-polyfill";
 import "./style.css";
 
 AppState.webSocket.connect();

@@ -15,6 +15,7 @@
   },
   "imports": {
     "@deno/vite-plugin": "npm:@deno/vite-plugin@^1.0.0",
+    "@oddbird/popover-polyfill": "npm:@oddbird/popover-polyfill@^0.7.2",
     "@std/uuid": "jsr:@std/uuid@^1.0.0",
     "easing-utils": "npm:easing-utils@^1.0.0",
     "msgpackr": "npm:msgpackr@^1.11.2",

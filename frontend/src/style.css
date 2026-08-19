@@ -111,7 +111,7 @@ body {
   background: none;
 }
 
-.outer-popover:has(> :popover-open) {
+.outer-popover:has(> :where(:popover-open, .\:popover-open)) {
   backdrop-filter: blur(3px);
   position: absolute;
   top: 0;
