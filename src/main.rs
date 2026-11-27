@@ -118,7 +118,8 @@ async fn broadcast_changes(
                 return Ok(());
             }
             Err(e) => {
-                // TODO handle sqlx::Error::Io(std::io::Error::ErrorKind::ConnectionReset)?
+                // TODO handle
+                // sqlx::Error::Io(std::io::Error::ErrorKind::ConnectionReset)?
                 token.cancel();
                 tracing::error!("{e}");
                 return Err(FridgeError::Sqlx(e));

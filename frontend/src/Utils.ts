@@ -1,4 +1,4 @@
-const BOX_SIZE = 100000;
+const BOX_SIZE = 120000;
 
 export function makeNewHash() {
   const randomX = Math.round(Math.random() * BOX_SIZE - BOX_SIZE / 2);
